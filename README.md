@@ -5,6 +5,8 @@ A native macOS market terminal (SwiftUI) with a local Python data gateway.
 - `app/` — SwiftUI app (Swift package): 1/2/4 linked panels, search, watchlists, and 17
   functions (QUOTE CHART DESC NEWS FIN EST EVT HOLD FILE OPT MKT MOVERS SCRN ECON CURVE PORT ALERT).
   Everything works by clicking or by typing commands — see HELP in the app.
+- `ipad/` — iPad app (XcodeGen project): a **Keypad** mode that drives the Mac like a
+  terminal keyboard, and a **Terminal** mode with the full UI fed by the Mac's data.
 - `gateway/` — Python sidecar (FastAPI + yfinance), started automatically by the app.
 - `docs/` — [architecture](docs/ARCHITECTURE.md) and the [clean-room study](docs/research/bloomberg-terminal-study.md).
 
@@ -24,6 +26,15 @@ cd app && ./scripts/make-app.sh && open build/finops-terminal.app
 Or open `app/Package.swift` in Xcode and run the `FinopsTerminal` scheme.
 
 Gateway logs: `~/Library/Application Support/finops-terminal/gateway.log`.
+
+## iPad
+The iPad gets its data through the Mac, so both must be on the same Wi-Fi with the Mac app open.
+```bash
+cd ipad && xcodegen generate && open FinopsPad.xcodeproj
+```
+Select your team and your iPad in Xcode, then Run. On the Mac, click the iPad icon in the
+toolbar → **Show pairing code**, then pick the Mac on the iPad and enter the code. The iPad
+remembers the pairing (token in its Keychain); revoke it from the same Mac panel.
 
 ## Test
 ```bash

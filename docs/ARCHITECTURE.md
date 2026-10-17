@@ -324,6 +324,22 @@ Dark appearance by default, and it follows the system setting. SF Mono with
 stale, warning. Every color passes WCAG contrast. Uses its own palette, not
 amber-on-black trade dress. Density settings (compact / comfortable).
 
+## 5.9 iPad companion
+- **Transport:** the Mac app runs `RemoteServer` (`FinopsRemote`), a WebSocket listener
+  advertised over Bonjour as `_finops._tcp` (TXT: `host`, `port`; default port 52817,
+  falling back to any free port).
+- **Pairing:** a 6-digit code shown on the Mac (5 minutes, 5 attempts) is exchanged for a
+  random 32-byte token. The iPad keeps the token in its Keychain; the Mac stores only its
+  SHA-256 and can revoke devices.
+- **One socket, two uses:** `remote.*` messages (commands, keypad actions, workspace state)
+  are handled by the Mac app. Every other message is relayed unchanged to the local
+  gateway, so the iPad's terminal mode reuses `DataClient` and all of `FinopsUI`.
+- **Keypad:** yellow sector/venue keys, amber function keys, red CANCEL, green GO, numeric
+  pad, P1–P4 and layout keys, chart option keys (built from the active panel's args), and
+  one-tap watchlist keys. The Mac pushes its workspace state on every change.
+- **Limits:** plain `ws://` on the local network (no TLS); the iPad has no data of its own
+  when the Mac is off.
+
 ## 6. Persistence
 | Store | Owner | Contents |
 |---|---|---|

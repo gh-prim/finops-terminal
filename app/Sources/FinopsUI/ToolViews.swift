@@ -57,7 +57,7 @@ struct PortfolioView: View {
             field("Quantity", $quantity, width: 80)
             field("Cost / share (blank = last)", $cost, width: 170)
             Button("Add position") {
-                guard !security.isEmpty, let q = Double(quantity) else { return }
+                guard !security.isEmpty, Double(quantity) != nil else { return }
                 let parts = ["PORT", "ADD", quantity] + (Double(cost) != nil ? [cost] : [])
                 run("\(security) " + parts.joined(separator: " "))
                 security = ""; quantity = ""; cost = ""

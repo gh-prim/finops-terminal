@@ -3,10 +3,13 @@ import SwiftUI
 
 public struct TerminalView: View {
     @Bindable var model: TerminalModel
+    let accessory: AnyView
     @FocusState private var commandFocused: Bool
 
-    public init(model: TerminalModel) {
+    /// `accessory` is shown at the right of the toolbar (Settings/pairing on Mac, connection on iPad).
+    public init(model: TerminalModel, accessory: AnyView = AnyView(EmptyView())) {
         self.model = model
+        self.accessory = accessory
     }
 
     public var body: some View {
@@ -50,10 +53,7 @@ public struct TerminalView: View {
                 Button { model.clearMessage() } label: { Image(systemName: "xmark") }
                     .buttonStyle(.plain).foregroundStyle(Palette.muted).accessibilityLabel("Dismiss message")
             }
-            SettingsLink { Image(systemName: "gearshape") }
-                .buttonStyle(TerminalButtonStyle())
-                .help("Settings (⌘,)")
-                .accessibilityLabel("Settings")
+            accessory
             ConnectionBadge(state: model.connection)
         }
         .padding(.horizontal, 10)
@@ -105,7 +105,7 @@ public struct TerminalView: View {
                 .textFieldStyle(.plain)
                 .focused($commandFocused)
                 .onSubmit { model.submit() }
-                .onExitCommand { model.cancel(); commandFocused = false }
+                .onKeyPress(.escape) { model.cancel(); commandFocused = false; return .handled }
                 .autocorrectionDisabled()
         }
         .font(.terminalSmall)

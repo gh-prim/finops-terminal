@@ -1,6 +1,11 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import FinopsCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Loads a document-shaped service and renders its blocks. Choice buttons and
 /// table rows carry commands, run through `run` exactly as if typed.
@@ -183,6 +188,7 @@ struct TableBlockView: View {
     let table: GatewayDocument.TableBlock
     let run: (String) -> Void
 
+    @Environment(\.openURL) private var openURL
     @State private var sortColumn: Int?
     @State private var ascending = false
     @State private var hovered: Int?
@@ -199,10 +205,18 @@ struct TableBlockView: View {
                     .buttonStyle(TerminalButtonStyle())
                     .help("Copy table")
                     .accessibilityLabel("Copy table")
+                #if os(macOS)
                 Button { exportCSV() } label: { Image(systemName: "square.and.arrow.down") }
                     .buttonStyle(TerminalButtonStyle())
                     .help("Export CSV")
                     .accessibilityLabel("Export CSV")
+                #else
+                ShareLink(item: CSVExport(name: exportName, csv: delimited(",")), preview: SharePreview(exportName)) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .buttonStyle(TerminalButtonStyle())
+                .accessibilityLabel("Export CSV")
+                #endif
             }
             ScrollView(.horizontal) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -286,7 +300,7 @@ struct TableBlockView: View {
 
     private func activate(_ row: GatewayDocument.Row) {
         if let cmd = row.cmd { run(cmd) }
-        else if let url = row.url.flatMap(URL.init(string:)) { NSWorkspace.shared.open(url) }
+        else if let url = row.url.flatMap(URL.init(string:)) { openURL(url) }
     }
 
     private var sortedRows: [GatewayDocument.Row] {
@@ -322,19 +336,40 @@ struct TableBlockView: View {
         return lines.joined(separator: "\n")
     }
 
-    private func copyTSV() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(delimited("\t"), forType: .string)
+    private var exportName: String {
+        "\(table.title ?? table.id).csv".replacingOccurrences(of: "/", with: "-")
     }
 
+    private func copyTSV() {
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(delimited("\t"), forType: .string)
+        #else
+        UIPasteboard.general.string = delimited("\t")
+        #endif
+    }
+
+    #if os(macOS)
     private func exportCSV() {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "\(table.title ?? table.id).csv".replacingOccurrences(of: "/", with: "-")
+        panel.nameFieldStringValue = exportName
         panel.allowedContentTypes = [.commaSeparatedText]
         let csv = delimited(",")
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             try? csv.write(to: url, atomically: true, encoding: .utf8)
         }
+    }
+    #endif
+}
+
+/// CSV payload for the iPad share sheet.
+struct CSVExport: Transferable {
+    let name: String
+    let csv: String
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(exportedContentType: .commaSeparatedText) { Data($0.csv.utf8) }
+            .suggestedFileName { $0.name }
     }
 }

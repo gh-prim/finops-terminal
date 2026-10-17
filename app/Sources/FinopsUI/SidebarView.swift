@@ -77,7 +77,7 @@ struct SidebarView: View {
                 .textFieldStyle(.plain)
                 .foregroundStyle(Palette.text)
                 .onSubmit { if let first = results.first { pick(first) } }
-                .onExitCommand { query = "" }
+                .onKeyPress(.escape) { query = ""; return .handled }
             if !query.isEmpty {
                 Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }
                     .buttonStyle(.plain)
@@ -111,7 +111,9 @@ struct SidebarView: View {
                     }
                     .foregroundStyle(Palette.muted)
                 }
+                #if os(macOS)
                 .menuStyle(.borderlessButton)
+                #endif
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .help("Switch, create or rename watchlists")

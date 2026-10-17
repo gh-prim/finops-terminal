@@ -1,0 +1,53 @@
+name: FinopsPad
+options:
+  bundleIdPrefix: dev.finops
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+
+packages:
+  FinopsTerminal:
+    path: ../app
+
+targets:
+  FinopsPad:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+    dependencies:
+      - package: FinopsTerminal
+        product: FinopsCore
+      - package: FinopsTerminal
+        product: FinopsUI
+      - package: FinopsTerminal
+        product: FinopsRemote
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: finops
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen:
+          UIColorName: ""
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIUserInterfaceStyle: Dark
+        NSLocalNetworkUsageDescription: finops finds and connects to finops-terminal on your Mac to get market data and to act as its keyboard.
+        NSBonjourServices:
+          - _finops._tcp
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.finops.pad
+        TARGETED_DEVICE_FAMILY: "2"
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_PREVIEWS: YES

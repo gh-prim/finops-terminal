@@ -20,14 +20,29 @@ public actor DataClient {
     private var streams: [String: AsyncStream<StreamEvent>.Continuation] = [:]
     private var nextID = 0
     private var closedError: Error?
+    private let unhandledContinuation: AsyncStream<Data>.Continuation
+
+    /// Messages the data protocol doesn't know (e.g. `remote.*` from a paired Mac).
+    public nonisolated let unhandled: AsyncStream<Data>
 
     public init(url: URL) {
         socket = URLSession.shared.webSocketTask(with: url)
+        (unhandled, unhandledContinuation) = AsyncStream<Data>.makeStream()
     }
 
-    public func start() {
+    /// Opens the socket. `hello` (e.g. a pairing/auth message) is sent before anything else.
+    public func start(hello: Data? = nil) async {
         socket.resume()
+        if let hello {
+            try? await socket.send(.string(String(decoding: hello, as: UTF8.self)))
+        }
         Task { await receiveLoop() }
+    }
+
+    /// Send an arbitrary JSON message on the same socket.
+    public func sendRaw(_ json: Data) async throws {
+        if let closedError { throw closedError }
+        try await socket.send(.string(String(decoding: json, as: UTF8.self)))
     }
 
     public func close() {
@@ -137,7 +152,10 @@ public actor DataClient {
 
     private func route(_ data: Data) {
         let decoder = JSONDecoder()
-        guard let header = try? decoder.decode(Header.self, from: data) else { return }
+        guard let header = try? decoder.decode(Header.self, from: data) else {
+            unhandledContinuation.yield(data)
+            return
+        }
         switch header.t {
         case "response":
             pending.removeValue(forKey: header.cid)?.resume(returning: data)
@@ -155,7 +173,7 @@ public actor DataClient {
         case "subStatus":
             streams[header.cid]?.yield(.status(header.status ?? "unknown", reason: header.reason))
         default:
-            break
+            unhandledContinuation.yield(data)
         }
     }
 
@@ -169,6 +187,7 @@ public actor DataClient {
             continuation.finish()
         }
         streams.removeAll()
+        unhandledContinuation.finish()
     }
 }
 
