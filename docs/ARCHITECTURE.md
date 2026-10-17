@@ -147,9 +147,9 @@ are JSON, decoded with `Codable` in Swift and Pydantic in Python.
   ```
   The router picks a provider for each field by capability, priority and
   health.
-- **Caching:** hot quotes live in memory. Historical series and fundamentals
-  go to SQLite in `~/Library/Application Support/finops-terminal/cache.db`,
-  keyed by `(id, field, periodicity, date)`. Reference data has a short TTL.
+- **Caching:** an in-memory TTL cache per provider call (quotes 1–2 min,
+  research 1 h, EDGAR facts 24 h, FRED 1 h). A persistent SQLite cache
+  (`~/Library/Application Support/finops-terminal/cache.db`) is planned.
 - **Rate limiting:** a token bucket for each provider key, with a queue and
   priority (interactive > background).
 
@@ -288,26 +288,35 @@ directly. Every module gets the shared
 header (security, last price, change), the parameter strip, export, alerts and
 help.
 
-### 5.7 Initial function set (our own names)
-| Command | Job |
-|---|---|
-| `DESC` | Security description and key stats |
-| `QUOTE` | Live quote, intraday stats, time & sales |
-| `CHART` | Historical/intraday chart, compare, indicators |
-| `HIST` | Price history table |
-| `FIN` | Financial statements |
-| `EST` | Estimates and ratings |
-| `DIV` / `EVT` | Dividends / corporate events calendar |
-| `NEWS` | News for the security or a topic |
-| `MKT` | World market overview (indices, rates, FX, commodities) |
-| `MOVERS` | Top gainers/losers/most active |
-| `ECON` | Economic calendar and series |
-| `CURVE` | Yield curves |
-| `FX` | Cross-rate matrix |
-| `SCRN` | Screener over the field dictionary |
-| `WATCH` | Watchlist monitor (multi-security live table) |
-| `ALERT` | Alert rules |
-| `PORT` | Portfolio holdings and P&L (v2) |
+### 5.7 Function set (implemented)
+Every screen is reachable by clicking (panel tabs, sidebar, buttons, table rows) and by
+typing. Gateway "document" responses carry `cmd` strings on choice buttons and table
+rows, so a click runs exactly the command a user would type.
+
+| Command | Aliases | Job | Source |
+|---|---|---|---|
+| `QUOTE` | Q | Live quote, day stats | yfinance |
+| `CHART` | CH, GP | Line/candles, volume, SMA/EMA/Bollinger, RSI, MACD, compare `VS` | yfinance |
+| `DESC` | DES | Profile, valuation, margins, dividend | yfinance |
+| `NEWS` | N | Headlines for a security or `NEWS <words>` | Yahoo |
+| `FIN` | FA | Income statement, balance sheet, cash flow (`A`/`Q`, `IS`/`BS`/`CF`) | SEC EDGAR |
+| `EST` | ANR | Ratings, price targets, EPS/revenue estimates, rating changes | yfinance |
+| `EVT` | DIV, ERN | Next earnings, earnings history, dividends, splits | yfinance |
+| `HOLD` | HDS | Institutions, funds, insider transactions | yfinance |
+| `FILE` | FILINGS | 10-K/10-Q/8-K/insider/proxy filings with links | SEC EDGAR |
+| `OPT` | OMON | Option chain by expiry | yfinance |
+| `MKT` | WEI | Indices, rates, FX, commodities, crypto | yfinance |
+| `MOVERS` | MOST | Gainers, losers, most active, … | yfinance screeners |
+| `SCRN` | EQS | Equity screener (`MCAP>10B PE<20 SECTOR=…`) | yfinance |
+| `ECON` | — | Macro dashboard + release calendar, `ECON <series> [range] [YOY]`, `ECON SEARCH` | FRED |
+| `CURVE` | — | Treasury curve vs 1M / 6M / 1Y ago | FRED |
+| `PORT` | — | Portfolio with live P&L (`<sec> PORT ADD <qty> [cost]`) | local + yfinance |
+| `ALERT` | — | Price alerts with macOS notifications (`<sec> ALERT > 350`) | local + yfinance |
+| `WATCH` | — | `<sec> WATCH` adds to the current watchlist (multiple watchlists) | local |
+
+Workspace: 1, 2 or 4 panels (⌥⌘1/2/4). Linked panels follow the security loaded in any
+other linked panel. ⌘1…⌘0 open the security functions in the active panel. Tables sort
+by column, copy as TSV and export CSV.
 
 ### 5.8 Visual design
 Dark appearance by default, and it follows the system setting. SF Mono with
@@ -346,15 +355,12 @@ finops-terminal/
 ```
 
 ## 9. Delivery phases
-1. **Skeleton:** Swift package and Python gateway. The app launches the
-   sidecar; the yfinance adapter serves history, quotes and lookup. A window
-   with the command line, one panel, `CHART` and `QUOTE`.
-2. **Workspace:** multi-panel grid, link groups, panel history, saved
-   workspaces, command palette, global keys, Settings.
-3. **Data breadth:** field dictionary, EDGAR adapter (`FIN`, `DESC`), Yahoo
-   news (`NEWS`), `MKT`, `WATCH`, stale/delayed flags.
-4. **Analysis:** FRED adapter (`ECON`, `CURVE` from Treasury series), `SCRN`,
-   `FX`, alerts (macOS notifications), exports.
+1. ✅ **Skeleton:** Swift package and Python gateway, `CHART` and `QUOTE`.
+2. ✅ **Company & markets:** `DESC NEWS FIN EST EVT HOLD FILE OPT MKT MOVERS SCRN`.
+3. ✅ **Macro:** `ECON` (dashboard, series, search, calendar) and `CURVE` via FRED.
+4. ✅ **Workspace & tools:** 1/2/4 linked panels, `PORT`, `ALERT`, multiple
+   watchlists, Settings (FRED key in Keychain), CSV export.
+   Next: saved workspaces, command palette with fuzzy search, SQLite cache.
 5. **Distribution:** bundled Python runtime inside the `.app`, signing and
    notarization, `PORT`.
 

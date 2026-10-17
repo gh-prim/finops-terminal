@@ -2,6 +2,7 @@ import AppKit
 import FinopsCore
 import FinopsUI
 import SwiftUI
+import UserNotifications
 
 @main
 struct FinopsTerminalApp: App {
@@ -15,6 +16,10 @@ struct FinopsTerminalApp: App {
                 .task { await delegate.boot(model) }
         }
         .commands { TerminalCommands() }
+
+        Settings {
+            SettingsView(model: model)
+        }
     }
 }
 
@@ -37,6 +42,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         gateway.stop()
     }
 
+    private static func postNotification(title: String, body: String) {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            content.sound = .default
+            center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+        }
+        NSSound.beep()
+    }
+
     func boot(_ model: TerminalModel) async {
         guard client == nil else { return }
         do {
@@ -44,7 +62,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let client = DataClient(url: url)
             await client.start()
             self.client = client
+            model.notify = { title, body in Self.postNotification(title: title, body: body) }
             model.connected(to: client)
+            await model.pushSettings()
         } catch {
             model.failed(error.localizedDescription)
         }

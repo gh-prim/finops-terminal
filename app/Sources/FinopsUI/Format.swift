@@ -1,7 +1,55 @@
+import FinopsCore
 import Foundation
 import SwiftUI
 
 enum Format {
+    static func number(_ value: Double?, digits: Int = 2) -> String {
+        guard let value else { return "—" }
+        let fraction = value.rounded() == value && abs(value) >= 1 ? 0 : digits
+        return value.formatted(.number.precision(.fractionLength(fraction)))
+    }
+
+    static func date(_ t: Double?) -> String {
+        guard let t else { return "—" }
+        return Date(timeIntervalSince1970: t).formatted(.dateTime.year().month(.abbreviated).day())
+    }
+
+    static func dateTime(_ t: Double?) -> String {
+        guard let t else { return "—" }
+        let date = Date(timeIntervalSince1970: t)
+        return Calendar.current.isDateInToday(date)
+            ? date.formatted(date: .omitted, time: .shortened)
+            : date.formatted(.dateTime.month(.abbreviated).day().hour().minute())
+    }
+
+    /// Display a gateway value according to its kind.
+    static func value(_ value: JSONValue, kind: ValueKind) -> String {
+        guard let n = value.number else { return value.string ?? "—" }
+        switch kind {
+        case .text: return value.string ?? "—"
+        case .int: return n.formatted(.number.precision(.fractionLength(0)))
+        case .number: return number(n)
+        case .price: return price(n)
+        case .compact: return compact(n)
+        case .percent: return n.formatted(.number.precision(.fractionLength(2))) + "%"
+        case .pctchange: return percent(n)
+        case .change: return signed(n, digits: abs(n) < 10 ? 4 : 2)
+        case .date: return date(n)
+        case .datetime: return dateTime(n)
+        }
+    }
+
+    static func color(_ value: JSONValue, kind: ValueKind) -> Color {
+        switch kind {
+        case .pctchange, .change: Palette.direction(value.number)
+        default: Palette.text
+        }
+    }
+
+    static func isNumeric(_ kind: ValueKind) -> Bool {
+        ![.text, .date, .datetime].contains(kind)
+    }
+
     static func price(_ value: Double?) -> String {
         guard let value else { return "—" }
         let digits = abs(value) < 10 ? 4 : 2

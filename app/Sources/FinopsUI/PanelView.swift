@@ -1,0 +1,151 @@
+import FinopsCore
+import SwiftUI
+
+/// One workspace panel: its own header (back, security, function tabs, link) and screen.
+struct PanelView: View {
+    let model: TerminalModel
+    let panel: PanelModel
+
+    private var isActive: Bool { model.activePanelID == panel.id }
+    private var state: PanelState { panel.state }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider().overlay(Palette.border)
+            screen
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .background(Palette.background)
+        .overlay(
+            Rectangle().stroke(isActive && model.panels.count > 1 ? Palette.accent.opacity(0.7) : .clear, lineWidth: 1)
+        )
+        .simultaneousGesture(TapGesture().onEnded { model.activate(panel) })
+    }
+
+    private func run(_ command: String) {
+        model.run(command, in: panel)
+    }
+
+    // MARK: Header
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Button { model.back(panel) } label: { Image(systemName: "chevron.left") }
+                    .buttonStyle(TerminalButtonStyle())
+                    .disabled(!panel.canGoBack)
+                    .help("Back (⌘[)")
+                    .accessibilityLabel("Back")
+                Text(state.security ?? "—")
+                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(state.security == nil ? Palette.muted : Palette.accent)
+                    .lineLimit(1)
+                Text(state.function.title).foregroundStyle(Palette.muted).lineLimit(1)
+                Spacer()
+                Button { panel.linked.toggle() } label: {
+                    Image(systemName: panel.linked ? "link" : "link.badge.plus")
+                }
+                .buttonStyle(TerminalButtonStyle(selected: panel.linked))
+                .help(panel.linked ? "Linked: follows the security of other linked panels" : "Not linked")
+                .accessibilityLabel(panel.linked ? "Unlink panel" : "Link panel")
+                if model.panels.count > 1 {
+                    Button { model.close(panel) } label: { Image(systemName: "xmark") }
+                        .buttonStyle(TerminalButtonStyle())
+                        .help("Close panel")
+                        .accessibilityLabel("Close panel")
+                }
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(FunctionID.allCases.filter { $0.group == .security }, id: \.self) { function in
+                        Button(function.rawValue) { model.open(function, in: panel) }
+                            .buttonStyle(TerminalButtonStyle(selected: state.function == function))
+                            .disabled(state.security == nil && function.needsSecurity)
+                            .help("\(function.title) — \(function.summary)")
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Palette.surface)
+    }
+
+    // MARK: Screen routing
+
+    @ViewBuilder
+    private var screen: some View {
+        if let client = model.client {
+            routed(client)
+                .id(stateKey)
+        } else if case .failed(let reason) = model.connection {
+            StatusMessage(title: "Data gateway failed to start", detail: reason, isError: true)
+        } else {
+            StatusMessage(title: "Starting data gateway…", detail: "The first launch installs Python dependencies and can take a minute.")
+        }
+    }
+
+    private var stateKey: String {
+        "\(state.security ?? "")|\(state.function.rawValue)|\(state.args.joined(separator: " "))"
+    }
+
+    @ViewBuilder
+    private func routed(_ client: DataClient) -> some View {
+        let security = state.security ?? ""
+        let args = state.args
+        switch state.function {
+        case .quote:
+            QuoteView(client: client, security: security, onError: model.report)
+        case .chart:
+            ChartView(client: client, security: security, config: state.chart,
+                      onChange: { model.setArgs($0.args, in: panel) }, onError: model.report)
+        case .desc:
+            DocumentView(client: client, service: "profile", params: ["security": security], run: run)
+        case .news:
+            DocumentView(client: client, service: "news",
+                         params: args.isEmpty && !security.isEmpty ? ["security": security] : ["query": args.joined(separator: " ")],
+                         run: run)
+        case .fin:
+            DocumentView(client: client, service: "financials", params: [
+                "security": security,
+                "period": args.contains("Q") ? "Q" : "A",
+                "statement": args.first { ["IS", "BS", "CF"].contains($0) } ?? "IS",
+            ], run: run)
+        case .est:
+            DocumentView(client: client, service: "estimates", params: ["security": security], run: run)
+        case .evt:
+            DocumentView(client: client, service: "events", params: ["security": security], run: run)
+        case .hold:
+            DocumentView(client: client, service: "holders", params: ["security": security], run: run)
+        case .file:
+            DocumentView(client: client, service: "filings", params: ["security": security, "group": args.first ?? "ALL"], run: run)
+        case .opt:
+            DocumentView(client: client, service: "options", params: ["security": security, "expiry": args.first ?? ""], run: run)
+        case .mkt:
+            DocumentView(client: client, service: "market", params: [:], run: run)
+        case .movers:
+            DocumentView(client: client, service: "movers", params: ["kind": args.first ?? "GAINERS"], run: run)
+        case .scrn:
+            DocumentView(client: client, service: "screen", params: ["filters": args.joined(separator: " ")], run: run)
+        case .econ:
+            if args.first == "SEARCH" {
+                DocumentView(client: client, service: "econ_search", params: ["query": args.dropFirst().joined(separator: " ")], run: run)
+            } else if let id = args.first {
+                EconSeriesView(client: client, id: id,
+                               range: args.dropFirst().first { $0 != "YOY" } ?? "10Y",
+                               yoy: args.contains("YOY"), run: run)
+            } else {
+                DocumentView(client: client, service: "econ", params: [:], run: run)
+            }
+        case .curve:
+            CurveView(client: client)
+        case .port:
+            PortfolioView(model: model, run: run)
+        case .alert:
+            AlertsView(model: model, defaultSecurity: state.security)
+        case .help:
+            HelpView(run: run)
+        }
+    }
+}

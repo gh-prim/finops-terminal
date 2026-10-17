@@ -29,3 +29,20 @@ struct CommandParserTests {
         #expect(CommandParser.parse("   ") == .empty)
     }
 }
+
+struct CommandParserExtendedTests {
+    @Test func watchAddsLoadedOrNamedSecurity() {
+        #expect(CommandParser.parse("nvda us eq watch") == .watch(security: "NVDA US EQ"))
+        #expect(CommandParser.parse("WATCH") == .watch(security: nil))
+    }
+
+    @Test func screenerFiltersStayArgs() {
+        #expect(CommandParser.parse("scrn mcap>10b pe<20")
+            == .run(security: nil, function: .scrn, args: ["MCAP>10B", "PE<20"]))
+    }
+
+    @Test func aliasesAreUnique() {
+        let all = FunctionID.allCases.flatMap(\.aliases)
+        #expect(Set(all).count == all.count)
+    }
+}

@@ -61,6 +61,23 @@ public actor DataClient {
         try await request("lookup", ["query": query], as: LookupResult.self)
     }
 
+    /// Any document-shaped service (profile, news, financials, market, …).
+    public func document(_ service: String, _ params: [String: String] = [:]) async throws -> GatewayDocument {
+        try await request(service, params, as: GatewayDocument.self)
+    }
+
+    public func econSeries(_ id: String, range: String, yoy: Bool) async throws -> EconSeries {
+        try await request("econ_series", ["id": id, "range": range, "units": yoy ? "pc1" : "lin"], as: EconSeries.self)
+    }
+
+    public func yieldCurves() async throws -> YieldCurves {
+        try await request("curve", [:], as: YieldCurves.self)
+    }
+
+    public func configure(edgarContact: String, fredApiKey: String) async throws {
+        _ = try await request("config", ["edgarContact": edgarContact, "fredApiKey": fredApiKey], as: ConfigAck.self)
+    }
+
     // MARK: Subscriptions
 
     public func subscribe(_ security: String) -> AsyncStream<StreamEvent> {
@@ -153,6 +170,10 @@ public actor DataClient {
         }
         streams.removeAll()
     }
+}
+
+private struct ConfigAck: Decodable, Sendable {
+    let ok: Bool
 }
 
 private struct Outgoing: Encodable {

@@ -22,8 +22,11 @@ from typing import Any
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from . import securities
+from .config import settings
 from .hub import Hub
-from .providers import yahoo
+from .providers import edgar, fred, yahoo
+from .providers import yahoo_research as research
+from .providers.http import HTTPError
 
 log = logging.getLogger(__name__)
 
@@ -90,28 +93,75 @@ class Connection:
                         await self.send({"t": "subStatus", "cid": cid, "status": "terminated"})
                 case other:
                     raise ValueError(f"unknown message type {other!r}")
-        except (ValueError, LookupError) as exc:
+        except (ValueError, LookupError, HTTPError) as exc:
             await self.send({"t": "error", "cid": cid, "code": "bad_request", "message": str(exc)})
         except Exception as exc:
             log.exception("request failed")
             await self.send({"t": "error", "cid": cid, "code": "provider_error", "message": str(exc)})
 
     async def request(self, service: str | None, params: dict[str, Any]) -> dict[str, Any]:
+        p = {k: str(v) for k, v in params.items()}
+
+        def symbol() -> str:
+            return securities.resolve(p.get("security", "")).symbol
+
         match service:
             case "refdata":
-                sec = securities.resolve(str(params.get("security", "")))
+                sec = securities.resolve(p.get("security", ""))
                 quote, name = await asyncio.gather(
                     asyncio.to_thread(yahoo.quote, sec.symbol),
                     asyncio.to_thread(yahoo.name, sec.symbol),
                 )
                 return {"security": _sec(sec, name), "quote": quote}
             case "history":
-                sec = securities.resolve(str(params.get("security", "")))
-                range_code = str(params.get("range", "1Y")).upper()
-                series = await asyncio.to_thread(yahoo.history, sec.symbol, range_code)
+                sec = securities.resolve(p.get("security", ""))
+                series = await asyncio.to_thread(yahoo.history, sec.symbol, p.get("range", "1Y").upper())
                 return {"security": _sec(sec, None), **series}
             case "lookup":
-                return await asyncio.to_thread(yahoo.lookup, str(params.get("query", "")))
+                return await asyncio.to_thread(yahoo.lookup, p.get("query", ""))
+            case "config":
+                if "edgarContact" in p:
+                    settings.edgar_contact = p["edgarContact"].strip()
+                if "fredApiKey" in p:
+                    settings.fred_api_key = p["fredApiKey"].strip()
+                    fred.dashboard.cache_clear()
+                return {"ok": True, "fred": bool(settings.fred_api_key)}
+            # Lot 1 — company
+            case "profile":
+                return await asyncio.to_thread(research.profile, symbol())
+            case "news":
+                query = symbol() if p.get("security") else (p.get("query") or "stock market")
+                return await asyncio.to_thread(research.news, query)
+            case "estimates":
+                return await asyncio.to_thread(research.estimates, symbol())
+            case "events":
+                return await asyncio.to_thread(research.events, symbol())
+            case "holders":
+                return await asyncio.to_thread(research.holders, symbol())
+            case "financials":
+                return await asyncio.to_thread(edgar.financials, symbol(), p.get("period", "A").upper(),
+                                               p.get("statement", "IS").upper())
+            case "filings":
+                return await asyncio.to_thread(edgar.filings, symbol(), p.get("group", "ALL").upper())
+            # Lot 2 — markets
+            case "options":
+                return await asyncio.to_thread(research.options, symbol(), p.get("expiry") or None)
+            case "market":
+                return await asyncio.to_thread(research.market)
+            case "movers":
+                return await asyncio.to_thread(research.movers, p.get("kind", "GAINERS"))
+            case "screen":
+                return await asyncio.to_thread(research.screen, tuple(p.get("filters", "").split()))
+            # Lot 3 — macro
+            case "econ":
+                return await asyncio.to_thread(fred.dashboard)
+            case "econ_series":
+                return await asyncio.to_thread(fred.series, p.get("id", "").upper(), p.get("range", "10Y").upper(),
+                                               p.get("units", "lin"))
+            case "econ_search":
+                return await asyncio.to_thread(fred.search, p.get("query", ""))
+            case "curve":
+                return await asyncio.to_thread(fred.curve)
             case _:
                 raise ValueError(f"unknown service {service!r}")
 

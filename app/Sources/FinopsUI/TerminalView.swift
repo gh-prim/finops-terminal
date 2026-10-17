@@ -15,13 +15,9 @@ public struct TerminalView: View {
                 .frame(width: 270)
             Divider().overlay(Palette.border)
             VStack(spacing: 0) {
-                topBar
+                toolbar
                 Divider().overlay(Palette.border)
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                if model.panel.function == .chart, model.panel.security != nil {
-                    rangeBar
-                }
+                panelGrid
                 Divider().overlay(Palette.border)
                 commandLine
             }
@@ -35,110 +31,82 @@ public struct TerminalView: View {
         .focusedSceneValue(\.focusCommandLine) { commandFocused = true }
     }
 
-    // MARK: Top bar: back · security · function tabs · status
-
-    private var topBar: some View {
-        HStack(spacing: 10) {
-            Button { model.back() } label: { Image(systemName: "chevron.left") }
-                .buttonStyle(TerminalButtonStyle())
-                .disabled(!model.canGoBack)
-                .help("Back (⌘[)")
-                .accessibilityLabel("Back")
-
-            Text(model.panel.security ?? "No security loaded")
-                .font(.system(size: 15, weight: .semibold, design: .monospaced))
-                .foregroundStyle(model.panel.security == nil ? Palette.muted : Palette.accent)
-                .lineLimit(1)
-
+    private var toolbar: some View {
+        HStack(spacing: 6) {
+            SectionLabel(title: "Layout")
+            ForEach(Layout.allCases, id: \.self) { layout in
+                Button { model.setLayout(layout) } label: { Image(systemName: layout.systemImage) }
+                    .buttonStyle(TerminalButtonStyle(selected: model.layout == layout))
+                    .help("\(layout.rawValue) panel\(layout == .single ? "" : "s") (⌥⌘\(layout.rawValue))")
+                    .accessibilityLabel("\(layout.rawValue) panels")
+            }
             Spacer()
-
-            tab(.quote, number: 1)
-            tab(.chart, number: 2)
-            Button { model.open(.help) } label: { Image(systemName: "questionmark") }
-                .buttonStyle(TerminalButtonStyle(selected: model.panel.function == .help))
-                .help("Help")
-                .accessibilityLabel("Help")
-
+            if let message = model.message {
+                Text(message)
+                    .font(.terminalSmall)
+                    .foregroundStyle(message.hasPrefix("🔔") || message.hasPrefix("Added") || message.hasPrefix("Alert set")
+                                     ? Palette.accent : Palette.down)
+                    .lineLimit(1)
+                Button { model.clearMessage() } label: { Image(systemName: "xmark") }
+                    .buttonStyle(.plain).foregroundStyle(Palette.muted).accessibilityLabel("Dismiss message")
+            }
+            SettingsLink { Image(systemName: "gearshape") }
+                .buttonStyle(TerminalButtonStyle())
+                .help("Settings (⌘,)")
+                .accessibilityLabel("Settings")
             ConnectionBadge(state: model.connection)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .background(Palette.surface)
     }
 
-    private func tab(_ function: FunctionID, number: Int) -> some View {
-        Button { model.open(function) } label: {
-            Text("\(number) \(function.rawValue)")
-        }
-        .buttonStyle(TerminalButtonStyle(selected: model.panel.function == function))
-        .keyboardShortcut(KeyEquivalent(Character(String(number))), modifiers: .command)
-        .disabled(model.panel.security == nil)
-        .help("\(function.title) (⌘\(number))")
-    }
-
-    // MARK: Content
-
     @ViewBuilder
-    private var content: some View {
-        switch (model.connection, model.client) {
-        case (.failed(let reason), _):
-            StatusMessage(title: "Data gateway failed to start", detail: reason, isError: true)
-        case (_, nil):
-            StatusMessage(title: "Starting data gateway…", detail: "The first launch installs Python dependencies and can take a minute.")
-        case (.ready, let client?):
-            panelView(client: client)
-        default:
-            EmptyView()
-        }
-    }
-
-    @ViewBuilder
-    private func panelView(client: DataClient) -> some View {
-        let panel = model.panel
-        switch (panel.function, panel.security) {
-        case (.quote, let security?):
-            QuoteView(client: client, security: security, onError: model.report)
-                .id(security)
-        case (.chart, let security?):
-            ChartView(client: client, security: security, range: panel.chartRange, onError: model.report)
-                .id("\(security)|\(panel.chartRange.rawValue)")
-        default:
-            HelpView()
-        }
-    }
-
-    private var rangeBar: some View {
-        HStack(spacing: 4) {
-            ForEach(ChartRange.allCases, id: \.self) { range in
-                Button(range.rawValue) { model.setRange(range) }
-                    .buttonStyle(TerminalButtonStyle(selected: model.panel.chartRange == range))
-                    .accessibilityLabel("Chart range \(range.rawValue)")
+    private var panelGrid: some View {
+        let panels = model.panels
+        switch panels.count {
+        case 1:
+            PanelView(model: model, panel: panels[0])
+        case 2:
+            HStack(spacing: 1) {
+                PanelView(model: model, panel: panels[0])
+                PanelView(model: model, panel: panels[1])
             }
-            Spacer()
+            .background(Palette.border)
+        default:
+            VStack(spacing: 1) {
+                HStack(spacing: 1) {
+                    PanelView(model: model, panel: panels[0])
+                    PanelView(model: model, panel: panels[1])
+                }
+                HStack(spacing: 1) {
+                    PanelView(model: model, panel: panels[2])
+                    if panels.count > 3 {
+                        PanelView(model: model, panel: panels[3])
+                    } else {
+                        Palette.background
+                    }
+                }
+            }
+            .background(Palette.border)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
     }
-
-    // MARK: Optional command line
 
     private var commandLine: some View {
         HStack(spacing: 8) {
+            Text(model.panels.count > 1 ? "P\((model.panels.firstIndex { $0.id == model.activePanelID } ?? 0) + 1)" : "")
+                .font(.terminalLabel)
+                .foregroundStyle(Palette.muted)
             Image(systemName: "chevron.right")
                 .font(.terminalSmall)
                 .foregroundStyle(commandFocused ? Palette.accent : Palette.muted)
-            TextField("Command (optional) — e.g. AAPL US EQ CHART 5Y   ⌘L", text: $model.commandText)
+            TextField("Command (optional) — e.g. AAPL US EQ CHART 5Y CANDLE SMA50 · FIN Q · SCRN PE<15 · ECON UNRATE   ⌘L",
+                      text: $model.commandText)
                 .textFieldStyle(.plain)
                 .focused($commandFocused)
                 .onSubmit { model.submit() }
                 .onExitCommand { model.cancel(); commandFocused = false }
                 .autocorrectionDisabled()
-            if let message = model.message {
-                Text(message)
-                    .font(.terminalSmall)
-                    .foregroundStyle(Palette.down)
-                    .lineLimit(1)
-            }
         }
         .font(.terminalSmall)
         .padding(.horizontal, 12)
@@ -147,7 +115,7 @@ public struct TerminalView: View {
     }
 }
 
-private struct ConnectionBadge: View {
+struct ConnectionBadge: View {
     let state: ConnectionState
 
     var body: some View {
@@ -207,13 +175,31 @@ public struct TerminalCommands: Commands {
 
     public init() {}
 
+    private static let keys: [Character] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
+
     public var body: some Commands {
         CommandMenu("Navigate") {
             Button("Back") { model?.back() }
                 .keyboardShortcut("[", modifiers: .command)
-                .disabled(!(model?.canGoBack ?? false))
+                .disabled(!(model?.activePanel.canGoBack ?? false))
             Button("Command Line") { focusCommandLine?() }
                 .keyboardShortcut("l", modifiers: .command)
+            Divider()
+            ForEach(Layout.allCases, id: \.self) { layout in
+                Button("\(layout.rawValue) Panel\(layout == .single ? "" : "s")") { model?.setLayout(layout) }
+                    .keyboardShortcut(KeyEquivalent(Character(String(layout.rawValue))), modifiers: [.command, .option])
+            }
+        }
+        CommandMenu("Function") {
+            let security = FunctionID.allCases.filter { $0.group == .security }
+            ForEach(Array(security.enumerated()), id: \.element) { index, function in
+                Button(function.title) { model?.open(function) }
+                    .keyboardShortcut(KeyEquivalent(Self.keys[index]), modifiers: .command)
+            }
+            Divider()
+            ForEach(FunctionID.allCases.filter { $0.group != .security }, id: \.self) { function in
+                Button(function.title) { model?.open(function) }
+            }
         }
     }
 }

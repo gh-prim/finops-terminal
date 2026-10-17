@@ -10,6 +10,12 @@ struct SidebarView: View {
     @State private var results: [LookupResult.Match] = []
     @State private var searching = false
     @State private var searchError: String?
+    @State private var naming: NamingMode?
+
+    private enum NamingMode: Identifiable {
+        case create, rename
+        var id: Int { self == .create ? 0 : 1 }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -19,6 +25,7 @@ struct SidebarView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if query.trimmingCharacters(in: .whitespaces).isEmpty {
+                        functions
                         watchlist
                     } else {
                         searchResults
@@ -28,6 +35,39 @@ struct SidebarView: View {
         }
         .background(Palette.surface)
         .task(id: query) { await search() }
+        .sheet(item: $naming) { mode in
+            NameSheet(title: mode == .create ? "New watchlist" : "Rename watchlist",
+                      initial: mode == .create ? "" : model.currentWatchlist.name) { name in
+                if mode == .create { model.createWatchlist(named: name) } else { model.renameCurrentWatchlist(to: name) }
+            }
+        }
+    }
+
+    private var functions: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SectionLabel(title: "Markets & tools")
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+            ForEach(FunctionID.allCases.filter { $0.group != .security }, id: \.self) { function in
+                Button { model.open(function) } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: function.systemImage).frame(width: 16).foregroundStyle(Palette.muted)
+                        Text(function.title)
+                        Spacer()
+                        Text(function.rawValue).font(.terminalLabel).foregroundStyle(Palette.muted)
+                    }
+                    .foregroundStyle(model.panel.function == function ? Palette.accent : Palette.text)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(function.summary)
+            }
+            Divider().overlay(Palette.border).padding(.top, 6)
+        }
+        .font(.terminal)
     }
 
     private var searchField: some View {
@@ -54,9 +94,37 @@ struct SidebarView: View {
 
     private var watchlist: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SectionLabel(title: "Watchlist")
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+            HStack {
+                Menu {
+                    ForEach(model.watchlists) { list in
+                        Button(list.name) { model.currentWatchlistID = list.id }
+                    }
+                    Divider()
+                    Button("New Watchlist…") { naming = .create }
+                    Button("Rename…") { naming = .rename }
+                    Button("Delete \(model.currentWatchlist.name)", role: .destructive) { model.deleteCurrentWatchlist() }
+                        .disabled(model.watchlists.count < 2)
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(model.currentWatchlist.name.uppercased()).font(.terminalLabel).tracking(1)
+                        Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
+                    }
+                    .foregroundStyle(Palette.muted)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Switch, create or rename watchlists")
+                Spacer()
+                if let security = model.panel.security, !model.isWatched(security) {
+                    Button { model.addToWatchlist(security) } label: { Image(systemName: "plus") }
+                        .buttonStyle(.plain).foregroundStyle(Palette.accent)
+                        .help("Add \(security) to this watchlist")
+                        .accessibilityLabel("Add \(security) to watchlist")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             if let client {
                 ForEach(model.watchlist, id: \.self) { security in
                     WatchlistRow(
@@ -230,5 +298,35 @@ private struct SearchResultRow: View {
         .padding(.vertical, 5)
         .background(hovering ? Palette.raised.opacity(0.5) : .clear)
         .onHover { hovering = $0 }
+    }
+}
+
+private struct NameSheet: View {
+    let title: String
+    let initial: String
+    let onSave: (String) -> Void
+
+    @State private var name = ""
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title).font(.headline)
+            TextField("Name", text: $name).onSubmit(save)
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Save", action: save).keyboardShortcut(.defaultAction)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(16)
+        .frame(width: 300)
+        .onAppear { name = initial }
+    }
+
+    private func save() {
+        onSave(name)
+        dismiss()
     }
 }
