@@ -159,10 +159,25 @@ struct ChartView: View {
 
     // MARK: Charts
 
+    /// TradingView-style candle colours.
+    private enum Candle {
+        static let up = Color(red: 0.149, green: 0.651, blue: 0.604)    // #26A69A
+        static let down = Color(red: 0.937, green: 0.325, blue: 0.314)  // #EF5350
+        static let halfWidth = 0.36                                     // body = 72% of a bar slot
+
+        static func color(_ bar: Bar) -> Color { bar.c >= (bar.o ?? bar.c) ? up : down }
+    }
+
+    /// Bars are placed at x = index (no weekend gaps). The domain leaves half a slot on the
+    /// left and a little air on the right, like TradingView.
+    private func xDomain(_ count: Int) -> ClosedRange<Double> {
+        -0.6...(Double(count) - 1 + max(4, Double(count) * 0.06))
+    }
+
     @ViewBuilder
     private func charts(_ bars: [Bar], interval: String) -> some View {
         let closes = bars.map(\.c)
-        let domain = 0...(bars.count - 1)
+        let domain = xDomain(bars.count)
         let ticks = tickIndices(count: bars.count)
         let lowest = !config.volume && config.studies.isEmpty
 
@@ -174,15 +189,22 @@ struct ChartView: View {
             if config.volume {
                 Chart {
                     ForEach(bars.indices, id: \.self) { i in
-                        BarMark(x: .value("i", i), y: .value("Volume", bars[i].v ?? 0), width: .ratio(0.8))
-                            .foregroundStyle((bars[i].c >= (bars[i].o ?? bars[i].c) ? Palette.up : Palette.down).opacity(0.6))
+                        RectangleMark(xStart: .value("x0", Double(i) - Candle.halfWidth),
+                                      xEnd: .value("x1", Double(i) + Candle.halfWidth),
+                                      yStart: .value("Zero", 0.0), yEnd: .value("Volume", bars[i].v ?? 0))
+                            .foregroundStyle(Candle.color(bars[i]).opacity(0.5))
                     }
-                    hoverRule
+                    crosshairX
                 }
                 .chartXScale(domain: domain)
                 .chartXAxis { xAxis(bars, ticks: ticks, labels: config.studies.isEmpty) }
-                .chartYAxis { AxisMarks(position: .trailing, values: .automatic(desiredCount: 2)) { _ in AxisValueLabel(format: FloatingPointFormatStyle<Double>.number.notation(.compactName)) } }
-                .frame(height: 60)
+                .chartYAxis {
+                    AxisMarks(position: .trailing, values: .automatic(desiredCount: 2)) { _ in
+                        AxisGridLine().foregroundStyle(Palette.border)
+                        AxisValueLabel(format: FloatingPointFormatStyle<Double>.number.notation(.compactName))
+                    }
+                }
+                .frame(height: 64)
             }
             ForEach(config.studies, id: \.self) { study in
                 studyChart(study, closes: closes, last: study == config.studies.last)
@@ -195,60 +217,99 @@ struct ChartView: View {
     }
 
     private func priceChart(_ bars: [Bar], closes: [Double]) -> some View {
+        let candles = config.style == .candle
         let rising = closes.last! >= closes.first!
-        let color = rising ? Palette.up : Palette.down
-        let lows = bars.map { config.style == .candle ? ($0.l ?? $0.c) : $0.c }
-        let highs = bars.map { config.style == .candle ? ($0.h ?? $0.c) : $0.c }
-        var low = lows.min()!, high = highs.max()!
+        let lineColor = rising ? Palette.up : Palette.down
+        var low = bars.map { candles ? ($0.l ?? $0.c) : $0.c }.min()!
+        var high = bars.map { candles ? ($0.h ?? $0.c) : $0.c }.max()!
         let overlays = overlaySeries(closes)
         for s in overlays { for (_, v) in s.points { low = min(low, v); high = max(high, v) } }
-        let pad = max((high - low) * 0.05, high * 0.001)
+        let pad = max((high - low) * 0.06, high * 0.001)
+        let minBody = (high - low) * 0.0015  // dojis stay visible
+        let last = bars.last!
+        let lastColor = candles ? Candle.color(last) : lineColor
 
         return Chart {
-            if config.style == .candle {
+            if candles {
                 ForEach(bars.indices, id: \.self) { i in
                     let b = bars[i]
-                    let up = b.c >= (b.o ?? b.c)
-                    RuleMark(x: .value("i", i), yStart: .value("Low", b.l ?? b.c), yEnd: .value("High", b.h ?? b.c))
+                    let open = b.o ?? b.c
+                    let color = Candle.color(b)
+                    let mid = (open + b.c) / 2
+                    let half = max(abs(b.c - open), minBody) / 2
+                    RuleMark(x: .value("x", Double(i)),
+                             yStart: .value("Low", b.l ?? min(open, b.c)), yEnd: .value("High", b.h ?? max(open, b.c)))
                         .lineStyle(StrokeStyle(lineWidth: 1))
-                        .foregroundStyle(up ? Palette.up : Palette.down)
-                    RectangleMark(x: .value("i", i), yStart: .value("Open", b.o ?? b.c), yEnd: .value("Close", b.c),
-                                  width: .ratio(0.7))
-                        .foregroundStyle(up ? Palette.up : Palette.down)
+                        .foregroundStyle(color)
+                    RectangleMark(xStart: .value("x0", Double(i) - Candle.halfWidth),
+                                  xEnd: .value("x1", Double(i) + Candle.halfWidth),
+                                  yStart: .value("Body low", mid - half), yEnd: .value("Body high", mid + half))
+                        .foregroundStyle(color)
                 }
             } else {
                 ForEach(bars.indices, id: \.self) { i in
-                    AreaMark(x: .value("i", i), yStart: .value("Floor", low - pad), yEnd: .value("Close", bars[i].c),
+                    AreaMark(x: .value("x", Double(i)), yStart: .value("Floor", low - pad), yEnd: .value("Close", bars[i].c),
                              series: .value("Series", "area"))
-                        .foregroundStyle(LinearGradient(colors: [color.opacity(0.22), color.opacity(0)], startPoint: .top, endPoint: .bottom))
-                    LineMark(x: .value("i", i), y: .value("Close", bars[i].c), series: .value("Series", "price"))
-                        .foregroundStyle(color)
-                        .lineStyle(StrokeStyle(lineWidth: 1.4))
+                        .foregroundStyle(LinearGradient(colors: [lineColor.opacity(0.22), lineColor.opacity(0)], startPoint: .top, endPoint: .bottom))
+                    LineMark(x: .value("x", Double(i)), y: .value("Close", bars[i].c), series: .value("Series", "price"))
+                        .foregroundStyle(lineColor)
+                        .lineStyle(StrokeStyle(lineWidth: 1.6))
                 }
             }
             ForEach(overlays) { series in
                 ForEach(series.points, id: \.0) { i, v in
-                    LineMark(x: .value("i", i), y: .value(series.name, v), series: .value("Series", series.name))
+                    LineMark(x: .value("x", Double(i)), y: .value(series.name, v), series: .value("Series", series.name))
                         .foregroundStyle(series.color)
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: series.dashed ? [3, 3] : []))
+                        .lineStyle(StrokeStyle(lineWidth: 1.2, dash: series.dashed ? [3, 3] : []))
                 }
             }
-            hoverRule
+
+            // Last price: dashed line across the pane, value tag on the right edge.
+            RuleMark(y: .value("Last", last.c))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                .foregroundStyle(lastColor.opacity(0.8))
+                .annotation(position: .overlay, alignment: .trailing, spacing: 0) {
+                    priceTag(last.c, color: lastColor)
+                }
+
+            // Crosshair.
+            crosshairX
             if let hovered, hovered < bars.count {
-                PointMark(x: .value("i", hovered), y: .value("Close", bars[hovered].c))
-                    .foregroundStyle(color).symbolSize(30)
+                RuleMark(y: .value("Hover", bars[hovered].c))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    .foregroundStyle(Palette.muted.opacity(0.7))
+                    .annotation(position: .overlay, alignment: .leading, spacing: 0) {
+                        priceTag(bars[hovered].c, color: Palette.raised)
+                    }
             }
         }
         .chartYScale(domain: (low - pad)...(high + pad))
-        .chartYAxis { AxisMarks(position: .trailing) }
+        .chartYAxis {
+            AxisMarks(position: .trailing, values: .automatic(desiredCount: 6)) { _ in
+                AxisGridLine().foregroundStyle(Palette.border)
+                AxisValueLabel()
+            }
+        }
         .chartLegend(.hidden)
         .accessibilityLabel("Price chart for \(security), \(config.range.rawValue)")
     }
 
+    private func priceTag(_ value: Double, color: Color) -> some View {
+        Text(Format.price(value))
+            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+            .monospacedDigit()
+            .foregroundStyle(.white)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(color, in: RoundedRectangle(cornerRadius: 2))
+    }
+
     @ChartContentBuilder
-    private var hoverRule: some ChartContent {
+    private var crosshairX: some ChartContent {
         if let hovered {
-            RuleMark(x: .value("i", hovered)).foregroundStyle(Palette.muted.opacity(0.5))
+            RuleMark(x: .value("x", Double(hovered)))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                .foregroundStyle(Palette.muted.opacity(0.7))
         }
     }
 
@@ -258,12 +319,16 @@ struct ChartView: View {
         case .rsi:
             let rsi = Indicators.rsi(closes)
             Chart {
-                RuleMark(y: .value("Overbought", 70)).foregroundStyle(Palette.down.opacity(0.4)).lineStyle(StrokeStyle(dash: [3, 3]))
-                RuleMark(y: .value("Oversold", 30)).foregroundStyle(Palette.up.opacity(0.4)).lineStyle(StrokeStyle(dash: [3, 3]))
+                RectangleMark(yStart: .value("Lo", 30.0), yEnd: .value("Hi", 70.0))
+                    .foregroundStyle(Color(red: 0.5, green: 0.4, blue: 0.9).opacity(0.07))
+                RuleMark(y: .value("Overbought", 70)).foregroundStyle(Palette.muted.opacity(0.5)).lineStyle(StrokeStyle(dash: [3, 3]))
+                RuleMark(y: .value("Oversold", 30)).foregroundStyle(Palette.muted.opacity(0.5)).lineStyle(StrokeStyle(dash: [3, 3]))
                 ForEach(points(rsi), id: \.0) { i, v in
-                    LineMark(x: .value("i", i), y: .value("RSI", v)).foregroundStyle(Palette.accent)
+                    LineMark(x: .value("x", Double(i)), y: .value("RSI", v))
+                        .foregroundStyle(Color(red: 0.62, green: 0.48, blue: 0.95))
+                        .lineStyle(StrokeStyle(lineWidth: 1.3))
                 }
-                hoverRule
+                crosshairX
             }
             .chartYScale(domain: 0...100)
             .chartYAxis { AxisMarks(position: .trailing, values: [30, 70]) }
@@ -272,16 +337,20 @@ struct ChartView: View {
             let m = Indicators.macd(closes)
             Chart {
                 ForEach(points(m.histogram), id: \.0) { i, v in
-                    BarMark(x: .value("i", i), y: .value("Hist", v), width: .ratio(0.8))
-                        .foregroundStyle((v >= 0 ? Palette.up : Palette.down).opacity(0.5))
+                    RectangleMark(xStart: .value("x0", Double(i) - Candle.halfWidth),
+                                  xEnd: .value("x1", Double(i) + Candle.halfWidth),
+                                  yStart: .value("Zero", 0.0), yEnd: .value("Hist", v))
+                        .foregroundStyle((v >= 0 ? Candle.up : Candle.down).opacity(0.55))
                 }
                 ForEach(points(m.macd), id: \.0) { i, v in
-                    LineMark(x: .value("i", i), y: .value("MACD", v), series: .value("S", "macd")).foregroundStyle(Palette.accent)
+                    LineMark(x: .value("x", Double(i)), y: .value("MACD", v), series: .value("S", "macd"))
+                        .foregroundStyle(Color(red: 0.16, green: 0.47, blue: 1.0))
                 }
                 ForEach(points(m.signal), id: \.0) { i, v in
-                    LineMark(x: .value("i", i), y: .value("Signal", v), series: .value("S", "signal")).foregroundStyle(Palette.selection)
+                    LineMark(x: .value("x", Double(i)), y: .value("Signal", v), series: .value("S", "signal"))
+                        .foregroundStyle(Palette.accent)
                 }
-                hoverRule
+                crosshairX
             }
             .chartYAxis { AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) }
             .overlay(alignment: .topLeading) { studyLabel("MACD 12/26/9", value: m.macd[hovered ?? (closes.count - 1)]) }
@@ -292,11 +361,11 @@ struct ChartView: View {
         Text("\(title)  \(Format.number(value))").font(.terminalLabel).foregroundStyle(Palette.muted).padding(4)
     }
 
-    private func xAxis(_ bars: [Bar], ticks: [Int], labels: Bool) -> some AxisContent {
+    private func xAxis(_ bars: [Bar], ticks: [Double], labels: Bool) -> some AxisContent {
         AxisMarks(values: ticks) { value in
             AxisGridLine().foregroundStyle(Palette.border)
-            if labels, let i = value.as(Int.self), i < bars.count {
-                AxisValueLabel { Text(axisLabel(bars[i].date)) }
+            if labels, let x = value.as(Double.self), Int(x) < bars.count {
+                AxisValueLabel { Text(axisLabel(bars[Int(x)].date)) }
             }
         }
     }
@@ -310,10 +379,10 @@ struct ChartView: View {
         }
     }
 
-    private func tickIndices(count: Int) -> [Int] {
-        let n = 6
-        guard count > n else { return Array(0..<count) }
-        return (0..<n).map { $0 * (count - 1) / (n - 1) }
+    private func tickIndices(count: Int) -> [Double] {
+        let n = 7
+        guard count > n else { return (0..<count).map(Double.init) }
+        return (0..<n).map { Double($0 * (count - 1) / (n - 1)) }
     }
 
     private func hoverOverlay(_ proxy: ChartProxy, count: Int) -> some View {
@@ -325,7 +394,7 @@ struct ChartView: View {
                         guard let plot = proxy.plotFrame else { return }
                         let x = location.x - geometry[plot].origin.x
                         if let v: Double = proxy.value(atX: x) {
-                            hovered = min(max(Int(v.rounded()), 0), count - 1)
+                            hovered = min(max(Int(v.rounded()), 0), count - 1)  // snap to the nearest bar
                         }
                     case .ended:
                         hovered = nil
