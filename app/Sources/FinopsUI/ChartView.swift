@@ -16,6 +16,9 @@ struct ChartView: View {
     @State private var failure: String?
     @State private var hovered: Int?
     @State private var compareInput = ""
+    /// Bars updated from the live quote stream (nil until the first tick).
+    @State private var liveBars: [Bar]?
+    @State private var lastTick: Date?
 
     private var comparing: Bool { !config.compare.isEmpty }
 
@@ -29,8 +32,13 @@ struct ChartView: View {
                 if comparing {
                     CompareChart(series: [main] + compares, security: security)
                 } else {
-                    header(main.bars)
-                    charts(main.bars, interval: main.interval)
+                    let bars = liveBars ?? main.bars
+                    header(bars)
+                    if main.range != config.range.rawValue, let interval = config.interval {
+                        Text("Yahoo serves \(interval.label) bars for \(main.range) at most — range limited.")
+                            .font(.terminalSmall).foregroundStyle(Palette.muted)
+                    }
+                    charts(bars, interval: main.interval)
                 }
             } else if main != nil {
                 StatusMessage(title: "Not enough data for \(security)", detail: "Try a longer range.")
@@ -50,6 +58,17 @@ struct ChartView: View {
     private var toolbar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
+                Button("AUTO") { update { $0.interval = nil } }
+                    .buttonStyle(TerminalButtonStyle(selected: config.interval == nil))
+                    .help("Bar size chosen from the range")
+                    .disabled(comparing)
+                ForEach(ChartConfig.Interval.allCases, id: \.self) { interval in
+                    Button(interval.label) { update { $0.interval = interval } }
+                        .buttonStyle(TerminalButtonStyle(selected: config.interval == interval))
+                        .help("\(interval.label) bars — or type CHART \(interval.rawValue)")
+                        .disabled(comparing)
+                }
+                divider
                 ForEach(ChartConfig.Style.allCases, id: \.self) { style in
                     Button(style.rawValue) { update { $0.style = style } }
                         .buttonStyle(TerminalButtonStyle(selected: config.style == style))
@@ -105,11 +124,16 @@ struct ChartView: View {
         HStack(spacing: 4) {
             ForEach(Array(ChartRange.allCases.enumerated()), id: \.element) { index, range in
                 Button(range.rawValue) { update { $0.range = range } }
-                    .buttonStyle(TerminalButtonStyle(selected: config.range == range))
+                    .buttonStyle(TerminalButtonStyle(selected: effectiveRange == range))
                     .help("Range \(range.rawValue) — or type \(index + 1) ⏎")
             }
             Spacer()
         }
+    }
+
+    /// The range actually shown (Yahoo may cap it for fine intervals).
+    private var effectiveRange: ChartRange {
+        main.flatMap { ChartRange(rawValue: $0.range) } ?? config.range
     }
 
     private func update(_ change: (inout ChartConfig) -> Void) {
@@ -136,9 +160,20 @@ struct ChartView: View {
         let bar = bars[index]
         let first = bars[0].c
         let change = bar.c - first
-        let intraday = (main?.interval ?? "").hasSuffix("m") || (main?.interval ?? "").hasSuffix("h")
+        let intraday = (main?.intervalSeconds ?? 86400) < 86400
+        let live = lastTick.map { Date.now.timeIntervalSince($0) < 30 } ?? false
         return HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(main?.security.typed ?? security).foregroundStyle(Palette.accent)
+            Text(ChartConfig.Interval(rawValue: main?.interval ?? "")?.label ?? main?.interval ?? "")
+                .font(.terminalSmall).foregroundStyle(Palette.muted)
+            if live {
+                HStack(spacing: 3) {
+                    Circle().fill(Heat.up).frame(width: 6, height: 6)
+                    Text("LIVE").font(.terminalLabel)
+                }
+                .foregroundStyle(Heat.up)
+                .help("Last candle updates from the quote stream (~5 s; Yahoo data may be delayed for some exchanges)")
+            }
             Text(Format.price(bar.c)).font(.title3.monospaced()).monospacedDigit()
             Text(Format.signed(change)).foregroundStyle(Palette.direction(change))
             Text(Format.percent(change / first * 100)).foregroundStyle(Palette.direction(change))
@@ -419,11 +454,14 @@ struct ChartView: View {
     }
 
     private func axisLabel(_ date: Date) -> String {
-        switch config.range {
-        case .d1: date.formatted(date: .omitted, time: .shortened)
-        case .d5, .m1: date.formatted(.dateTime.month(.abbreviated).day())
-        case .m3, .m6, .ytd, .y1: date.formatted(.dateTime.month(.abbreviated))
-        default: date.formatted(.dateTime.year())
+        let step = main?.intervalSeconds ?? 86400
+        switch effectiveRange {
+        case .d1: return date.formatted(date: .omitted, time: .shortened)
+        case .d5 where step < 86400, .m1 where step < 3600:
+            return date.formatted(.dateTime.weekday(.abbreviated).day().hour().minute())
+        case .d5, .m1: return date.formatted(.dateTime.month(.abbreviated).day())
+        case .m3, .m6, .ytd, .y1: return date.formatted(.dateTime.month(.abbreviated).day())
+        default: return date.formatted(.dateTime.month(.abbreviated).year(.twoDigits))
         }
     }
 
@@ -484,7 +522,7 @@ struct ChartView: View {
 
     private func load() async {
         do {
-            main = try await client.history(security, range: config.range)
+            main = try await client.history(security, range: config.range, interval: config.interval)
         } catch {
             failure = error.localizedDescription
             onError(error)
@@ -496,6 +534,29 @@ struct ChartView: View {
             catch { onError(error) }
         }
         compares = loaded
+        if !comparing { await streamLastBar() }
+    }
+
+    /// Keep the last candle live: update its close/high/low on each tick, and open a new candle
+    /// when an intraday interval rolls over (only when the price actually moves, so closed
+    /// markets don't grow flat bars).
+    private func streamLastBar() async {
+        guard let main, let step = main.intervalSeconds else { return }
+        for await event in await client.subscribe(security) {
+            guard case .tick(let quote) = event else { continue }
+            var bars = liveBars ?? main.bars
+            guard let last = bars.last else { continue }
+            let price = quote.last
+            if step < 86400, quote.asOf >= last.t + step, price != last.c {
+                let start = last.t + ((quote.asOf - last.t) / step).rounded(.down) * step
+                bars.append(Bar(t: start, o: price, h: price, l: price, c: price, v: 0))
+            } else {
+                bars[bars.count - 1] = Bar(t: last.t, o: last.o, h: max(last.h ?? price, price),
+                                           l: min(last.l ?? price, price), c: price, v: last.v)
+            }
+            liveBars = bars
+            lastTick = .now
+        }
     }
 }
 

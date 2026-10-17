@@ -170,7 +170,8 @@ class Connection:
                 return {"security": _sec(sec, name), "quote": quote}
             case "history":
                 sec = securities.resolve(p.get("security", ""))
-                series = await asyncio.to_thread(yahoo.history, sec.symbol, p.get("range", "1Y").upper())
+                series = await asyncio.to_thread(yahoo.history, sec.symbol, p.get("range", "1Y").upper(),
+                                                 (p.get("interval") or "").upper() or None)
                 return {"security": _sec(sec, None), **series}
             case "lookup":
                 return await asyncio.to_thread(yahoo.lookup, p.get("query", ""))

@@ -68,8 +68,10 @@ public actor DataClient {
         try await request("refdata", ["security": security], as: RefData.self)
     }
 
-    public func history(_ security: String, range: ChartRange) async throws -> History {
-        try await request("history", ["security": security, "range": range.rawValue], as: History.self)
+    public func history(_ security: String, range: ChartRange, interval: ChartConfig.Interval? = nil) async throws -> History {
+        var params = ["security": security, "range": range.rawValue]
+        if let interval { params["interval"] = interval.rawValue }
+        return try await request("history", params, as: History.self)
     }
 
     public func lookup(_ query: String) async throws -> LookupResult {

@@ -41,12 +41,23 @@ public struct Bar: Codable, Sendable, Hashable, Identifiable {
 
     public var id: Double { t }
     public var date: Date { Date(timeIntervalSince1970: t) }
+
+    public init(t: Double, o: Double?, h: Double?, l: Double?, c: Double, v: Double?) {
+        self.t = t
+        self.o = o
+        self.h = h
+        self.l = l
+        self.c = c
+        self.v = v
+    }
 }
 
 public struct History: Codable, Sendable, Hashable {
     public let security: SecurityInfo
     public let range: String
     public let interval: String
+    /// Seconds per bar (60 for 1-minute bars, 86400 for daily…).
+    public let intervalSeconds: Double?
     public let bars: [Bar]
 }
 

@@ -186,7 +186,26 @@ public struct ChartConfig: Equatable, Sendable {
         case rsi = "RSI", macd = "MACD", stoch = "STOCH", atr = "ATR", obv = "OBV", adx = "ADX"
     }
 
+    /// Bar size. nil = automatic from the range (1D → 5m, 5D → 15m, 1M → 1h, longer → daily/weekly).
+    public enum Interval: String, CaseIterable, Sendable {
+        case m1 = "1MIN", m5 = "5MIN", m15 = "15MIN", m30 = "30MIN", h1 = "1H", h4 = "4H", d1 = "1DAY", w1 = "1WK"
+
+        public var label: String {
+            switch self {
+            case .m1: "1m"
+            case .m5: "5m"
+            case .m15: "15m"
+            case .m30: "30m"
+            case .h1: "1h"
+            case .h4: "4h"
+            case .d1: "D"
+            case .w1: "W"
+            }
+        }
+    }
+
     public var range: ChartRange = .y1
+    public var interval: Interval?
     public var style: Style = .line
     public var volume = false
     public var overlays: [Overlay] = []
@@ -200,6 +219,7 @@ public struct ChartConfig: Equatable, Sendable {
         while i < args.count {
             let token = args[i]
             if let r = ChartRange(rawValue: token) { range = r }
+            else if let iv = Interval(rawValue: token) { interval = iv }
             else if let s = Style(rawValue: token) { style = s }
             else if token == "VOL" { volume = true }
             else if let o = Overlay(rawValue: token), !overlays.contains(o) { overlays.append(o) }
@@ -219,7 +239,7 @@ public struct ChartConfig: Equatable, Sendable {
         for token in args {
             if skipNext { skipNext = false; continue }
             if token == "VS" { skipNext = true; continue }
-            if ChartRange(rawValue: token) == nil, Style(rawValue: token) == nil, token != "VOL",
+            if ChartRange(rawValue: token) == nil, Interval(rawValue: token) == nil, Style(rawValue: token) == nil, token != "VOL",
                Overlay(rawValue: token) == nil, Study(rawValue: token) == nil {
                 unknown.append(token)
             }
@@ -229,6 +249,7 @@ public struct ChartConfig: Equatable, Sendable {
 
     public var args: [String] {
         var out = [range.rawValue]
+        if let interval { out.append(interval.rawValue) }
         if style != .line { out.append(style.rawValue) }
         if volume { out.append("VOL") }
         out += overlays.map(\.rawValue)

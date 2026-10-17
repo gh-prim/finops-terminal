@@ -66,6 +66,13 @@ struct MoreIndicatorTests {
         #expect(Indicators.adx(high: high, low: low, close: close).last!! > 50)
     }
 
+    @Test func intervalRoundTrips() {
+        let config = ChartConfig(args: ["5D", "15MIN", "CANDLE"])
+        #expect(config.interval == .m15 && config.range == .d5)
+        #expect(ChartConfig(args: config.args) == config)
+        #expect(ChartConfig(args: ["1Y"]).interval == nil)
+    }
+
     @Test func newStudiesRoundTrip() {
         let config = ChartConfig(args: ["1Y", "STOCH", "ADX"])
         #expect(config.studies == [.stoch, .adx])

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import functools
 import math
 import os
@@ -10,6 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, ParamSpec, TypeVar
 
+import pandas as pd
 import yfinance as yf
 
 CACHE_DIR = Path(
@@ -63,30 +65,84 @@ def _num(value: Any) -> float | None:
     return None if math.isnan(f) or math.isinf(f) else f
 
 
-@_retry_locked
-def history(symbol: str, range_code: str) -> dict[str, Any]:
-    if range_code not in RANGES:
-        raise ValueError(f"unknown range {range_code!r}; use one of {', '.join(RANGES)}")
-    period, interval = RANGES[range_code]
-    df = yf.Ticker(symbol).history(period=period, interval=interval, auto_adjust=True)
-    if df.empty:
-        raise LookupError(f"no history for {symbol}")
+# Explicit bar intervals: token -> (yfinance interval, max lookback days, seconds per bar).
+INTERVALS: dict[str, tuple[str, int | None, int]] = {
+    "1MIN": ("1m", 7, 60),
+    "5MIN": ("5m", 59, 300),
+    "15MIN": ("15m", 59, 900),
+    "30MIN": ("30m", 59, 1800),
+    "1H": ("60m", 729, 3600),
+    "4H": ("60m", 729, 14400),   # resampled from 1h bars
+    "1DAY": ("1d", None, 86400),
+    "1WK": ("1wk", None, 604800),
+}
+AUTO_INTERVAL = {"5m": "5MIN", "15m": "15MIN", "1h": "1H", "1d": "1DAY", "1wk": "1WK", "1mo": "1MO"}
+RANGE_ORDER = ["1D", "5D", "1M", "3M", "6M", "YTD", "1Y", "2Y", "5Y", "10Y", "MAX"]
+
+
+def range_days(code: str) -> int | None:
+    if code == "YTD":
+        today = dt.date.today()
+        return (today - dt.date(today.year, 1, 1)).days + 1
+    return {"1D": 1, "5D": 5, "1M": 31, "3M": 92, "6M": 183, "1Y": 365, "2Y": 730, "5Y": 1826, "10Y": 3652}.get(code)
+
+
+def clamp_range(range_code: str, interval_code: str) -> str:
+    """Largest range not exceeding what Yahoo serves for this interval."""
+    max_days = INTERVALS[interval_code][1]
+    if max_days is None:
+        return range_code
+    days = range_days(range_code)
+    if days is not None and days <= max_days:
+        return range_code
+    allowed = [r for r in RANGE_ORDER if (range_days(r) or 10**9) <= max_days]
+    return allowed[-1]
+
+
+def _bars(df: pd.DataFrame) -> list[dict[str, Any]]:
     bars = []
     for ts, row in df.iterrows():
         close = _num(row["Close"])
         if close is None:
             continue
-        bars.append(
-            {
-                "t": ts.timestamp(),
-                "o": _num(row["Open"]),
-                "h": _num(row["High"]),
-                "l": _num(row["Low"]),
-                "c": close,
-                "v": _num(row["Volume"]),
-            }
-        )
-    return {"symbol": symbol, "range": range_code, "interval": interval, "bars": bars}
+        bars.append({"t": ts.timestamp(), "o": _num(row["Open"]), "h": _num(row["High"]), "l": _num(row["Low"]),
+                     "c": close, "v": _num(row["Volume"])})
+    return bars
+
+
+def _four_hour(df: pd.DataFrame) -> pd.DataFrame:
+    """Group 1h bars into 4-bar chunks per session day (US: 9:30–13:30, 13:30–16:00)."""
+    day = df.index.normalize()
+    chunk = df.groupby(day).cumcount() // 4
+    grouped = df.groupby([day, chunk])
+    out = pd.DataFrame({
+        "Open": grouped["Open"].first(), "High": grouped["High"].max(), "Low": grouped["Low"].min(),
+        "Close": grouped["Close"].last(), "Volume": grouped["Volume"].sum(),
+    })
+    out.index = pd.DatetimeIndex([g.index[0] for _, g in grouped])  # keep the exchange time zone
+    return out
+
+
+@_retry_locked
+def history(symbol: str, range_code: str, interval_code: str | None = None) -> dict[str, Any]:
+    if range_code not in RANGES:
+        raise ValueError(f"unknown range {range_code!r}; use one of {', '.join(RANGES)}")
+    if interval_code and interval_code not in INTERVALS:
+        raise ValueError(f"unknown interval {interval_code!r}; use one of {', '.join(INTERVALS)}")
+    if interval_code:
+        range_code = clamp_range(range_code, interval_code)
+        period, interval = RANGES[range_code][0], INTERVALS[interval_code][0]
+    else:
+        period, interval = RANGES[range_code]
+        interval_code = AUTO_INTERVAL.get(interval, interval.upper())
+    df = yf.Ticker(symbol).history(period=period, interval=interval, auto_adjust=True)
+    if df.empty:
+        raise LookupError(f"no history for {symbol}")
+    if interval_code == "4H":
+        df = _four_hour(df)
+    seconds = INTERVALS.get(interval_code, (None, None, 2_592_000))[2]
+    return {"symbol": symbol, "range": range_code, "interval": interval_code, "intervalSeconds": seconds,
+            "bars": _bars(df)}
 
 
 @_retry_locked
