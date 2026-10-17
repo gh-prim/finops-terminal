@@ -19,10 +19,13 @@ import logging
 import secrets
 from typing import Any
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from . import securities
 from .config import settings
+from .devices import DeviceStore, PostgresDeviceStore
 from .hub import Hub
 from .providers import edgar, fred, yahoo
 from .providers import yahoo_research as research
@@ -31,8 +34,23 @@ from .providers.http import HTTPError
 log = logging.getLogger(__name__)
 
 
-def create_app(token: str, hub: Hub | None = None) -> FastAPI:
-    app = FastAPI(title="finops-gateway")
+BACKEND_NAME = "finops-backend"
+AUTH_TIMEOUT = 10
+
+
+def create_app(token: str | None = None, hub: Hub | None = None, devices: DeviceStore | None = None,
+               database_url: str | None = None) -> FastAPI:
+    """`token`: single shared secret (the Mac's local sidecar).
+    `devices` / `database_url`: per-device pairing (the shared backend)."""
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        if database_url and app.state.devices is None:
+            app.state.devices = await PostgresDeviceStore.connect(database_url)
+        yield
+
+    app = FastAPI(title="finops-gateway", lifespan=lifespan)
+    app.state.devices = devices
     hub = hub or Hub()
 
     @app.get("/health")
@@ -41,13 +59,47 @@ def create_app(token: str, hub: Hub | None = None) -> FastAPI:
 
     @app.websocket("/ws")
     async def ws(socket: WebSocket) -> None:
-        if not secrets.compare_digest(socket.query_params.get("token", ""), token):
-            await socket.close(code=4401)
-            return
-        await socket.accept()
+        store: DeviceStore | None = app.state.devices
+        if store is None:
+            if token is None or not secrets.compare_digest(socket.query_params.get("token", ""), token):
+                await socket.close(code=4401)
+                return
+            await socket.accept()
+        else:
+            await socket.accept()
+            if not await authenticate(socket, store):
+                await socket.close(code=4401)
+                return
         await Connection(socket, hub).run()
 
     return app
+
+
+async def authenticate(socket: WebSocket, store: DeviceStore) -> bool:
+    """First message must be remote.pair or remote.auth (same wire format as the Mac's LAN pairing)."""
+    try:
+        hello = await asyncio.wait_for(socket.receive_json(), AUTH_TIMEOUT)
+    except (TimeoutError, WebSocketDisconnect, ValueError):
+        return False
+    kind = hello.get("t")
+    device_id = str(hello.get("deviceID", ""))[:128]
+    if kind == "remote.pair" and device_id:
+        token = await store.pair(str(hello.get("code", "")), device_id, str(hello.get("deviceName", "device"))[:64])
+        if token:
+            log.info("paired device %s (%s)", device_id, hello.get("deviceName"))
+            await socket.send_json({"t": "remote.paired", "token": token, "macName": BACKEND_NAME})
+            return True
+        await socket.send_json({"t": "remote.authFailed",
+                                "reason": "Wrong or expired code. Create one with: finops-admin pair"})
+        return False
+    if kind == "remote.auth" and device_id:
+        if await store.verify(device_id, str(hello.get("token", ""))):
+            await socket.send_json({"t": "remote.authOK", "macName": BACKEND_NAME})
+            return True
+        await socket.send_json({"t": "remote.authFailed", "reason": "This device is not paired with the backend. Pair it again."})
+        return False
+    await socket.send_json({"t": "remote.authFailed", "reason": "Authentication required"})
+    return False
 
 
 class Connection:
@@ -81,6 +133,8 @@ class Connection:
         cid = str(msg.get("cid", ""))
         try:
             match msg.get("t"):
+                case str(t) if t.startswith("remote."):
+                    return  # keypad relay is phase 5; ignore for now
                 case "request":
                     data = await self.request(msg.get("service"), msg.get("params") or {})
                     await self.send({"t": "response", "cid": cid, "data": data})

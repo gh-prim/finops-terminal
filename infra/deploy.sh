@@ -20,3 +20,6 @@ ssh "$remote" "cd $dir && if [ ! -f .env ]; then umask 077; {
 } > .env; echo '  generated .env'; fi"
 
 ssh "$remote" "cd $dir/infra && docker-compose --env-file ../.env up -d --build --remove-orphans && sleep 5 && docker-compose --env-file ../.env ps"
+
+# TLS on the tailnet: tailscaled terminates HTTPS with its *.ts.net certificate (idempotent).
+ssh "$remote" "sudo tailscale serve --bg --https=443 http://127.0.0.1:8765 >/dev/null && tailscale serve status"

@@ -26,6 +26,7 @@ final class PadSession {
     private var autoConnectAttempted = false
 
     private static let lastHostKey = "pad.lastHost"
+    private static let backendURLKey = "pad.backendURL"
 
     init() {
         link = RemoteLink(deviceID: Self.deviceID, deviceName: UIDevice.current.name)
@@ -42,10 +43,21 @@ final class PadSession {
         guard isConnected, let client = link.client else { return }
         connectedHost = host
         UserDefaults.standard.set(host.name, forKey: Self.lastHostKey)
+        if host.isBackend {
+            UserDefaults.standard.set(host.url?.absoluteString, forKey: Self.backendURLKey)
+        }
         let model = TerminalModel()
         model.notify = { title, body in Notifier.post(title: title, body: body) }
-        model.connected(to: client)
+        model.connected(to: client, source: host.isBackend ? "backend" : "Mac")
         self.model = model
+    }
+
+    var isBackend: Bool { connectedHost?.isBackend ?? false }
+
+    /// Saved backend address (wss://…/ws), if any.
+    var backendURL: String {
+        get { UserDefaults.standard.string(forKey: Self.backendURLKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: Self.backendURLKey) }
     }
 
     func disconnect() {
@@ -57,8 +69,9 @@ final class PadSession {
     /// Reconnect to the last paired Mac as soon as it shows up on the network.
     func autoConnectIfPossible() async {
         guard !autoConnectAttempted, !isConnected,
-              let name = UserDefaults.standard.string(forKey: Self.lastHostKey),
-              let host = browser.hosts.first(where: { $0.name == name }),
+              let name = UserDefaults.standard.string(forKey: Self.lastHostKey) else { return }
+        let backend = RemoteHost.backendURL(from: backendURL).map(RemoteHost.backend)
+        guard let host = backend?.name == name ? backend : browser.hosts.first(where: { $0.name == name }),
               RemoteLink.hasToken(for: host) else { return }
         autoConnectAttempted = true
         await connect(to: host)

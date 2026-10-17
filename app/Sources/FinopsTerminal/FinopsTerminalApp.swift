@@ -19,7 +19,12 @@ struct FinopsTerminalApp: App {
         .commands { TerminalCommands() }
 
         Settings {
-            SettingsView(model: model)
+            TabView {
+                SettingsView(model: model)
+                    .tabItem { Label("Providers", systemImage: "key") }
+                BackendSettingsView(delegate: delegate, model: model)
+                    .tabItem { Label("Backend", systemImage: "server.rack") }
+            }
         }
     }
 }
@@ -45,29 +50,97 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         gateway.stop()
     }
 
+    // MARK: Data source: backend first, local sidecar as fallback
+
+    let backendLink = RemoteLink(deviceID: AppDelegate.deviceID, deviceName: Host.current().localizedName ?? "Mac")
+    private(set) var localGatewayURL: URL?
+    private var watchdog: Task<Void, Never>?
+
+    static var backendHost: RemoteHost? {
+        UserDefaults.standard.string(forKey: "backend.url").flatMap(RemoteHost.backendURL(from:)).map(RemoteHost.backend)
+    }
+
+    private static var deviceID: String {
+        if let id = UserDefaults.standard.string(forKey: "mac.deviceID") { return id }
+        let id = UUID().uuidString
+        UserDefaults.standard.set(id, forKey: "mac.deviceID")
+        return id
+    }
+
     func boot(_ model: TerminalModel) async {
         guard client == nil else { return }
+        model.notify = { title, body in
+            Notifier.post(title: title, body: body)
+            NSSound.beep()
+        }
+        if let host = Self.backendHost, RemoteLink.hasToken(for: host), await useBackend(host, model: model) {
+            return
+        }
+        await useLocal(model)
+        if let host = Self.backendHost, RemoteLink.hasToken(for: host), case .failed(let reason) = backendLink.phase {
+            model.show(message: "Backend unreachable (\(reason)) — using local data")
+        }
+    }
+
+    /// Connect to the backend (pairing with `code` when given). Returns true on success.
+    @discardableResult
+    func useBackend(_ host: RemoteHost, code: String? = nil, model: TerminalModel) async -> Bool {
+        await backendLink.connect(to: host, code: code)
+        guard case .connected = backendLink.phase, let client = backendLink.client, let url = host.url else { return false }
+        self.client = client
+        model.connected(to: client, source: "backend")
+        startRemote(model: model, gatewayURL: url, hello: backendLink.authHello(for: host))
+        gateway.stop()  // the backend replaces the local sidecar
+        localGatewayURL = nil
+        watchBackend(host, model: model)
+        return true
+    }
+
+    /// `fromWatchdog`: the backend dropped; keep the watchdog alive so it can switch back.
+    func useLocal(_ model: TerminalModel, fromWatchdog: Bool = false) async {
+        if !fromWatchdog { watchdog?.cancel() }
+        backendLink.disconnect()
+        if localGatewayURL != nil, model.dataSource == "local" { return }  // already on the local sidecar
         do {
             let url = try await gateway.start()
             let client = DataClient(url: url)
             await client.start()
             self.client = client
-            model.notify = { title, body in
-                Notifier.post(title: title, body: body)
-                NSSound.beep()
-            }
-            model.connected(to: client)
+            localGatewayURL = url
+            model.connected(to: client, source: "local")
             await model.pushSettings()
-            startRemote(model: model, gatewayURL: url)
+            startRemote(model: model, gatewayURL: url, hello: nil)
         } catch {
             model.failed(error.localizedDescription)
         }
     }
 
+    /// If the backend connection drops, fall back to local data and retry the backend every minute.
+    private func watchBackend(_ host: RemoteHost, model: TerminalModel) {
+        watchdog?.cancel()
+        watchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard let self, case .failed(let reason) = self.backendLink.phase else { continue }
+                model.show(message: "Backend lost (\(reason)) — switched to local data")
+                await self.useLocal(model, fromWatchdog: true)
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(60))
+                    if await self.useBackend(host, model: model) {
+                        model.show(message: "Backend back — using backend data")
+                        return
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: iPad remote
 
-    private func startRemote(model: TerminalModel, gatewayURL: URL) {
+    private func startRemote(model: TerminalModel, gatewayURL: URL, hello: Data?) {
+        // iPads on the LAN are relayed to whatever this Mac uses (backend or local sidecar).
         remote.gatewayURL = gatewayURL
+        remote.gatewayHello = hello
         remote.onCommand = { model.run($0) }
         remote.onAction = { action in
             switch action {
@@ -97,9 +170,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 message: model.message
             )
         }
+        guard !remoteStarted else { return }
+        remoteStarted = true
         remote.start(hostName: Self.bonjourHostName)
         observeState()
     }
+
+    private var remoteStarted = false
 
     /// Re-broadcast the workspace state to iPads whenever anything it reads changes.
     private func observeState() {

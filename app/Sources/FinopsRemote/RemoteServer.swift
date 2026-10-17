@@ -16,6 +16,8 @@ public final class RemoteServer {
 
     /// Upstream gateway WebSocket (with its token) used to relay data requests.
     @ObservationIgnored public var gatewayURL: URL?
+    /// First message on each upstream socket (device auth when the upstream is the backend).
+    @ObservationIgnored public var gatewayHello: Data?
     @ObservationIgnored public var onCommand: ((String) -> Void)?
     @ObservationIgnored public var onAction: ((RemoteAction) -> Void)?
     @ObservationIgnored public var stateProvider: (() -> RemoteState)?
@@ -216,7 +218,7 @@ public final class RemoteServer {
         peer.deviceID = deviceID
         peer.deviceName = name
         peer.authenticated = true
-        if let gatewayURL { peer.openUpstream(gatewayURL) }
+        if let gatewayURL { peer.openUpstream(gatewayURL, hello: gatewayHello) }
         refreshConnected()
     }
 }
@@ -243,16 +245,20 @@ private final class Peer {
         connection.send(content: data, contentContext: context, isComplete: true, completion: .idempotent)
     }
 
-    func openUpstream(_ url: URL) {
+    func openUpstream(_ url: URL, hello: Data?) {
         guard upstream == nil else { return }
         let task = URLSession.shared.webSocketTask(with: url)
         task.resume()
         upstream = task
+        if let hello { task.send(.string(String(decoding: hello, as: UTF8.self))) { _ in } }
         upstreamTask = Task { [weak self] in
             while let message = try? await task.receive() {
                 guard let self, !self.closed else { return }
                 switch message {
-                case .string(let text): self.send(Data(text.utf8))
+                case .string(let text):
+                    // The backend's auth reply is for the Mac, not the iPad.
+                    if hello != nil, RemoteMessage.isRemote(Data(text.utf8)) { continue }
+                    self.send(Data(text.utf8))
                 case .data(let data): self.send(data)
                 @unknown default: break
                 }

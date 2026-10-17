@@ -28,6 +28,7 @@ struct RootView: View {
         .background(Pad.background.ignoresSafeArea())
         .task {
             session.browser.start()
+            await session.autoConnectIfPossible()  // backend needs no discovery
         }
         .onChange(of: session.browser.hosts) {
             Task { await session.autoConnectIfPossible() }
@@ -42,6 +43,11 @@ struct ConnectedView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
+                if session.isBackend {
+                    Label("Terminal · backend", systemImage: "server.rack")
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Pad.amber)
+                } else {
                 Picker("Mode", selection: $session.mode) {
                     ForEach(PadSession.Mode.allCases) { mode in
                         Label(mode.rawValue, systemImage: mode == .keypad ? "keyboard" : "rectangle.split.3x1")
@@ -50,6 +56,7 @@ struct ConnectedView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 280)
+                }
                 Spacer()
                 if case .connected(let mac) = session.link.phase {
                     Label(mac, systemImage: "laptopcomputer")
@@ -63,7 +70,7 @@ struct ConnectedView: View {
             .padding(.vertical, 8)
             .background(Pad.surface)
 
-            switch session.mode {
+            switch session.isBackend ? .terminal : session.mode {
             case .keypad:
                 KeypadView(link: session.link)
             case .terminal:

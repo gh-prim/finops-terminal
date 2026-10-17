@@ -87,7 +87,7 @@ struct PanelView: View {
     }
 
     private var stateKey: String {
-        "\(state.security ?? "")|\(state.function.rawValue)|\(state.args.joined(separator: " "))"
+        "\(model.clientGeneration)|\(state.security ?? "")|\(state.function.rawValue)|\(state.args.joined(separator: " "))"
     }
 
     @ViewBuilder

@@ -8,6 +8,8 @@ struct ConnectView: View {
 
     @State private var selected: RemoteHost?
     @State private var code = ""
+    @State private var backendAddress = ""
+    @State private var backendCode = ""
     @State private var manualHost = ""
     @State private var manualPort = "52817"
     @FocusState private var codeFocused: Bool
@@ -19,6 +21,37 @@ struct ConnectView: View {
                     Text("finops").font(.system(size: 34, weight: .bold, design: .monospaced)).foregroundStyle(Pad.amber)
                     Text("Connect to finops-terminal on your Mac. Both devices must be on the same Wi-Fi.")
                         .foregroundStyle(Pad.muted)
+                }
+
+                section("finops backend (anywhere, over Tailscale)") {
+                    TextField("finops-backend.<tailnet>.ts.net", text: $backendAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .padding(10)
+                        .background(Pad.surface, in: RoundedRectangle(cornerRadius: 8))
+                    if let host = backendHost {
+                        if RemoteLink.hasToken(for: host) {
+                            Button("Connect") { connectBackend(host, code: nil) }
+                                .buttonStyle(.borderedProminent).tint(Pad.amber)
+                                .disabled(connecting)
+                        } else {
+                            Text("First time: on the backend run  finops-admin pair  and enter the code.")
+                                .foregroundStyle(Pad.muted)
+                            HStack(spacing: 12) {
+                                TextField("6-digit code", text: $backendCode)
+                                    .keyboardType(.numberPad)
+                                    .font(.system(size: 22, weight: .bold, design: .monospaced))
+                                    .frame(width: 200)
+                                    .padding(10)
+                                    .background(Pad.surface, in: RoundedRectangle(cornerRadius: 8))
+                                    .onChange(of: backendCode) { backendCode = String(backendCode.filter(\.isNumber).prefix(6)) }
+                                Button("Pair") { connectBackend(host, code: backendCode) }
+                                    .buttonStyle(.borderedProminent).tint(Pad.amber)
+                                    .disabled(backendCode.count != 6 || connecting)
+                            }
+                        }
+                    }
                 }
 
                 section("Macs on this network") {
@@ -101,9 +134,20 @@ struct ConnectView: View {
             .frame(maxWidth: .infinity)
         }
         .font(.system(size: 15, design: .monospaced))
+        .onAppear { if backendAddress.isEmpty { backendAddress = session.backendURL } }
     }
 
     private var connecting: Bool { session.link.phase == .connecting }
+
+    private var backendHost: RemoteHost? {
+        RemoteHost.backendURL(from: backendAddress).map(RemoteHost.backend)
+    }
+
+    private func connectBackend(_ host: RemoteHost, code: String?) {
+        session.backendURL = backendAddress
+        backendCode = ""
+        Task { await session.connect(to: host, code: code) }
+    }
 
     private var failed: Bool {
         if case .failed = session.link.phase { return true }

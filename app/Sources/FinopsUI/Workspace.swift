@@ -66,6 +66,10 @@ public struct NumberedAction: Identifiable, Sendable {
 public final class TerminalModel {
     public private(set) var connection: ConnectionState = .starting
     public private(set) var client: DataClient?
+    /// Where data comes from ("backend", "local", or the Mac's name on iPad).
+    public private(set) var dataSource: String?
+    /// Bumped on every (re)connection so views holding the old client reload.
+    public private(set) var clientGeneration = 0
     public private(set) var panels: [PanelModel]
     public private(set) var activePanelID: UUID
     public private(set) var layout: Layout = .single
@@ -117,11 +121,18 @@ public final class TerminalModel {
 
     // MARK: Connection
 
-    public func connected(to client: DataClient) {
+    public func connected(to client: DataClient, source: String? = nil) {
         self.client = client
+        dataSource = source
+        clientGeneration += 1
         connection = .ready
         quotes.setClient(client)
         trackQuotes()
+    }
+
+    /// A status line in the toolbar (e.g. "Backend unreachable, using local data").
+    public func show(message: String) {
+        self.message = message
     }
 
     public func failed(_ reason: String) {

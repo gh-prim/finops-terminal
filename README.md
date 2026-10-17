@@ -27,6 +27,12 @@ Or open `app/Package.swift` in Xcode and run the `FinopsTerminal` scheme.
 
 Gateway logs: `~/Library/Application Support/finops-terminal/gateway.log`.
 
+## Backend
+A dedicated Proxmox VM runs the data gateway for every device (see [infra/](infra/README.md)).
+On the Mac: **Settings → Backend**, enter `finops-backend.<tailnet>.ts.net` and a code from
+`finops-admin pair`. The Mac uses the backend when it's reachable and falls back to its local
+sidecar otherwise. The iPad can connect to the backend directly from anywhere (Tailscale on).
+
 ## iPad
 The iPad gets its data through the Mac, so both must be on the same Wi-Fi with the Mac app open.
 ```bash

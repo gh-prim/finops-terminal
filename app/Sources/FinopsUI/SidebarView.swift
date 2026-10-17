@@ -136,6 +136,7 @@ struct SidebarView: View {
                         onSelect: { model.load(security) },
                         onRemove: { model.removeFromWatchlist(security) }
                     )
+                    .id("\(model.clientGeneration)|\(security)")
                 }
             } else {
                 ForEach(model.watchlist, id: \.self) { security in

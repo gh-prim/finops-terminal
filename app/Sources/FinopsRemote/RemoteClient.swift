@@ -8,15 +8,43 @@ public struct RemoteHost: Identifiable, Hashable, Sendable {
     public let name: String
     public let host: String
     public let port: UInt16
+    private let explicitURL: URL?
     public var id: String { name }
 
+    /// A Mac found over Bonjour (plain ws:// on the LAN).
     public init(name: String, host: String, port: UInt16) {
         self.name = name
         self.host = host
         self.port = port
+        explicitURL = nil
     }
 
-    public var url: URL? { URL(string: "ws://\(host):\(port)") }
+    /// The finops backend, e.g. wss://finops-backend.<tailnet>.ts.net/ws
+    public static func backend(_ url: URL) -> RemoteHost {
+        RemoteHost(name: "backend:\(url.host() ?? url.absoluteString)", host: url.host() ?? "", port: UInt16(url.port ?? 443), url: url)
+    }
+
+    private init(name: String, host: String, port: UInt16, url: URL) {
+        self.name = name
+        self.host = host
+        self.port = port
+        explicitURL = url
+    }
+
+    public var isBackend: Bool { explicitURL != nil }
+
+    public var url: URL? { explicitURL ?? URL(string: "ws://\(host):\(port)") }
+
+    /// Normalise what a user types ("finops-backend.x.ts.net", "https://…") into a wss://…/ws URL.
+    public static func backendURL(from text: String) -> URL? {
+        var s = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return nil }
+        if !s.contains("://") { s = "wss://" + s }
+        s = s.replacingOccurrences(of: "https://", with: "wss://").replacingOccurrences(of: "http://", with: "ws://")
+        guard var components = URLComponents(string: s), components.host?.isEmpty == false else { return nil }
+        if components.path.isEmpty || components.path == "/" { components.path = "/ws" }
+        return components.url
+    }
 }
 
 /// iPad side: discovers Macs over Bonjour.
@@ -87,6 +115,15 @@ public final class RemoteLink {
 
     public static func hasToken(for host: RemoteHost) -> Bool {
         RemoteKeychain.get("token:\(host.name)") != nil
+    }
+
+    public static func forgetToken(for host: RemoteHost) {
+        RemoteKeychain.set(nil, for: "token:\(host.name)")
+    }
+
+    /// The auth message this device would send to `host`, if it has a stored token.
+    public func authHello(for host: RemoteHost) -> Data? {
+        RemoteKeychain.get("token:\(host.name)").map { RemoteMessage.auth(token: $0, deviceID: deviceID).encoded() }
     }
 
     /// Connect with the stored token, or pair with `code` when given.

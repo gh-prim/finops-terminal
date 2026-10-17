@@ -35,13 +35,19 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--token", default=os.environ.get("FINOPS_GATEWAY_TOKEN", "dev"))
     parser.add_argument("--parent-pid", type=int)
+    parser.add_argument("--auth", choices=["token", "devices"], default="token",
+                        help="token: shared secret (local sidecar); devices: per-device pairing in Postgres")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     if args.parent_pid:
         threading.Thread(target=_exit_with_parent, args=(args.parent_pid,), daemon=True).start()
 
-    uvicorn.run(create_app(args.token), host=args.host, port=args.port, log_level="warning")
+    if args.auth == "devices":
+        app = create_app(database_url=os.environ["DATABASE_URL"])
+    else:
+        app = create_app(args.token)
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 
 
 if __name__ == "__main__":

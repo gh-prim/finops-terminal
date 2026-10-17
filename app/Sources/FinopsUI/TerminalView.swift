@@ -54,7 +54,7 @@ public struct TerminalView: View {
                     .buttonStyle(.plain).foregroundStyle(Palette.muted).accessibilityLabel("Dismiss message")
             }
             accessory
-            ConnectionBadge(state: model.connection)
+            ConnectionBadge(state: model.connection, source: model.dataSource)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -117,11 +117,12 @@ public struct TerminalView: View {
 
 struct ConnectionBadge: View {
     let state: ConnectionState
+    var source: String? = nil
 
     var body: some View {
         let (label, color): (String, Color) = switch state {
         case .starting: ("starting", Palette.muted)
-        case .ready: ("live", Palette.up)
+        case .ready: (source.map { "live · \($0)" } ?? "live", Palette.up)
         case .failed: ("offline", Palette.down)
         }
         HStack(spacing: 4) {

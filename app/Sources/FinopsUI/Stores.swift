@@ -55,6 +55,9 @@ public final class QuoteBoard {
     @ObservationIgnored var onTick: ((String, Quote) -> Void)?
 
     func setClient(_ client: DataClient) {
+        // A new connection: drop subscriptions held on the previous socket.
+        for task in tasks.values { task.cancel() }
+        tasks.removeAll()
         self.client = client
         refresh()
     }

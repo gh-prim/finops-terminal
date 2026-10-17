@@ -146,7 +146,7 @@ ever want multiple users.
 | Phase | Content | Done when |
 |---|---|---|
 | **0 · Infra** ✅ | `infra/` (bootstrap, compose), VM 110 via cloud-init, Tailscale, firewall, backups | `ssh finops@finops-backend` works and `docker compose ps` is healthy |
-| **1 · Gateway as a server** | Containerized gateway, Postgres/Redis, device auth, Mac/iPad pointed at the backend (Mac fallback kept) | The iPad shows a chart over 4G with no Mac running |
+| **1 · Gateway as a server** ✅ | Containerized gateway, Postgres/Redis, device auth, Mac/iPad pointed at the backend (Mac fallback kept) | The iPad shows a chart over 4G with no Mac running |
 | **2 · Sync** | API for watchlists/portfolio/alerts/workspaces, data migration, realtime push | A watchlist edited on the iPad appears on the Mac within 1 s |
 | **3 · Server-side alerts** | Alerts worker, APNs, triggered history | An alert arrives on the iPad with both apps closed |
 | **4 · Cache and history** | Timescale for series, Redis fan-out, cache warming | Repeated CHART / FIN in < 100 ms, Yahoo calls down by more than 80% |
