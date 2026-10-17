@@ -31,6 +31,7 @@ def _exit_with_parent(parent_pid: int) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="finops-gateway")
+    parser.add_argument("--host", default="127.0.0.1", help="bind address (0.0.0.0 inside a container)")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--token", default=os.environ.get("FINOPS_GATEWAY_TOKEN", "dev"))
     parser.add_argument("--parent-pid", type=int)
@@ -40,7 +41,7 @@ def main() -> None:
     if args.parent_pid:
         threading.Thread(target=_exit_with_parent, args=(args.parent_pid,), daemon=True).start()
 
-    uvicorn.run(create_app(args.token), host="127.0.0.1", port=args.port, log_level="warning")
+    uvicorn.run(create_app(args.token), host=args.host, port=args.port, log_level="warning")
 
 
 if __name__ == "__main__":

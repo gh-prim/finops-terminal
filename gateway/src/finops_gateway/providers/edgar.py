@@ -24,6 +24,9 @@ _last_request = 0.0
 
 def _get(url: str) -> Any:
     global _last_request
+    if not settings.edgar_contact:
+        raise LookupError("SEC EDGAR requires a contact email: set EDGAR_CONTACT on the backend "
+                          "(or Settings → EDGAR contact in the Mac app).")
     with _rate_lock:  # stay well under SEC's 10 requests/second
         wait = 0.15 - (time.monotonic() - _last_request)
         if wait > 0:

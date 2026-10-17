@@ -27,6 +27,9 @@ def get_json(url: str, params: dict[str, Any] | None = None, headers: dict[str, 
             if response.headers.get("Content-Encoding") == "gzip":
                 body = gzip.decompress(body)
     except urllib.error.HTTPError as exc:
-        detail = exc.read()[:300].decode("utf-8", "replace")
+        raw = exc.read()
+        if exc.headers.get("Content-Encoding") == "gzip":
+            raw = gzip.decompress(raw)
+        detail = raw[:300].decode("utf-8", "replace").strip()
         raise HTTPError(exc.code, f"HTTP {exc.code} from {urllib.parse.urlparse(url).netloc}: {detail}") from None
     return json.loads(body)
