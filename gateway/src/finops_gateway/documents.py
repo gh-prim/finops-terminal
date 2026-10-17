@@ -99,3 +99,59 @@ def document(title: str, blocks: list[dict[str, Any]], source: str, subtitle: st
         "notes": notes or [],
         "asOf": time.time(),
     }
+
+
+# MARK: Visual blocks (rendered natively by the app)
+
+
+def treemap(id: str, title: str | None, groups: list[dict[str, Any]], kind: str = "pctchange") -> dict[str, Any]:
+    """groups: [{"label", "items": [{"label", "detail", "weight", "value", "cmd"}]}]; area = weight, colour = value."""
+    return {"type": "treemap", "id": id, "title": title, "kind": kind, "groups": groups}
+
+
+def matrix(id: str, title: str | None, rows: list[str], cols: list[str], values: list[list[Any]],
+           kind: str = "number", scale: str = "diverging", center: float = 0.0,
+           row_cmds: list[str | None] | None = None) -> dict[str, Any]:
+    """Heat-coloured grid. scale: diverging (red/green around `center`) or correlation (-1…1)."""
+    return {"type": "matrix", "id": id, "title": title, "rows": rows, "cols": cols,
+            "values": [[cell(v) for v in r] for r in values], "kind": kind, "scale": scale, "center": center,
+            "rowCmds": row_cmds}
+
+
+def scatter(id: str, title: str | None, x_label: str, y_label: str, points: list[dict[str, Any]],
+            x_kind: str = "number", y_kind: str = "number") -> dict[str, Any]:
+    """points: [{"label", "x", "y", "size"?, "highlight"?, "cmd"?}]"""
+    return {"type": "scatter", "id": id, "title": title, "xLabel": x_label, "yLabel": y_label,
+            "xKind": x_kind, "yKind": y_kind,
+            "points": [{**p, "x": cell(p["x"]), "y": cell(p["y"]), "size": cell(p.get("size"))} for p in points
+                       if cell(p.get("x")) is not None and cell(p.get("y")) is not None]}
+
+
+def graph(id: str, title: str | None, center: dict[str, Any], groups: list[dict[str, Any]]) -> dict[str, Any]:
+    """Hub-and-spoke relationship graph. groups: [{"title", "side": left|right|bottom, "nodes": [{"label","detail","value","cmd"}]}]"""
+    return {"type": "graph", "id": id, "title": title, "center": center, "groups": groups}
+
+
+def bars(id: str, title: str | None, items: list[dict[str, Any]], kind: str = "number") -> dict[str, Any]:
+    """Horizontal bars: [{"label", "value", "cmd"?}]"""
+    return {"type": "bars", "id": id, "title": title, "kind": kind,
+            "items": [{**i, "value": cell(i["value"])} for i in items if cell(i.get("value")) is not None]}
+
+
+def series(id: str, title: str | None, lines: list[dict[str, Any]], kind: str = "number") -> dict[str, Any]:
+    """Line chart: [{"label", "points": [[t, v], …]}]"""
+    return {"type": "series", "id": id, "title": title, "kind": kind,
+            "lines": [{"label": l["label"], "points": [[cell(t), cell(v)] for t, v in l["points"] if cell(v) is not None]}
+                      for l in lines]}
+
+
+def donut(id: str, title: str | None, items: list[dict[str, Any]], kind: str = "percent") -> dict[str, Any]:
+    return {"type": "donut", "id": id, "title": title, "kind": kind,
+            "items": [{**i, "value": cell(i["value"])} for i in items if cell(i.get("value"))]}
+
+
+def sparkgrid(id: str, title: str | None, items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Small multiples: [{"label", "detail", "change", "points": [v…], "cmd"}]"""
+    return {"type": "sparkgrid", "id": id, "title": title,
+            "items": [{**i, "change": cell(i.get("change")), "points": [cell(v) for v in i["points"] if cell(v) is not None]}
+                      for i in items if i.get("points")]}

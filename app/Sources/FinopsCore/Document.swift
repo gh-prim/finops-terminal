@@ -64,6 +64,14 @@ public struct GatewayDocument: Decodable, Sendable {
         case kv(KVBlock)
         case text(TextBlock)
         case choices(ChoicesBlock)
+        case treemap(TreemapBlock)
+        case matrix(MatrixBlock)
+        case scatter(ScatterBlock)
+        case graph(GraphBlock)
+        case bars(BarsBlock)
+        case series(SeriesBlock)
+        case donut(DonutBlock)
+        case sparkgrid(SparkGridBlock)
         case unknown
 
         public var id: String {
@@ -72,6 +80,14 @@ public struct GatewayDocument: Decodable, Sendable {
             case .kv(let k): "kv-\(k.title ?? "")"
             case .text(let t): "text-\(t.title ?? "")"
             case .choices(let c): "choices-\(c.id)"
+            case .treemap(let b): "treemap-\(b.id)"
+            case .matrix(let b): "matrix-\(b.id)"
+            case .scatter(let b): "scatter-\(b.id)"
+            case .graph(let b): "graph-\(b.id)"
+            case .bars(let b): "bars-\(b.id)"
+            case .series(let b): "series-\(b.id)"
+            case .donut(let b): "donut-\(b.id)"
+            case .sparkgrid(let b): "sparkgrid-\(b.id)"
             case .unknown: "unknown-\(UUID())"
             }
         }
@@ -85,6 +101,14 @@ public struct GatewayDocument: Decodable, Sendable {
             case "kv": self = .kv(try KVBlock(from: decoder))
             case "text": self = .text(try TextBlock(from: decoder))
             case "choices": self = .choices(try ChoicesBlock(from: decoder))
+            case "treemap": self = .treemap(try TreemapBlock(from: decoder))
+            case "matrix": self = .matrix(try MatrixBlock(from: decoder))
+            case "scatter": self = .scatter(try ScatterBlock(from: decoder))
+            case "graph": self = .graph(try GraphBlock(from: decoder))
+            case "bars": self = .bars(try BarsBlock(from: decoder))
+            case "series": self = .series(try SeriesBlock(from: decoder))
+            case "donut": self = .donut(try DonutBlock(from: decoder))
+            case "sparkgrid": self = .sparkgrid(try SparkGridBlock(from: decoder))
             default: self = .unknown
             }
         }
@@ -138,6 +162,139 @@ public struct GatewayDocument: Decodable, Sendable {
         public let title: String?
         public let items: [Item]
         public let selected: String?
+    }
+}
+
+// MARK: Visual blocks
+
+public extension GatewayDocument {
+    struct TreemapBlock: Decodable, Sendable {
+        public struct Item: Decodable, Sendable, Hashable {
+            public let label: String
+            public let detail: String?
+            public let weight: Double
+            public let value: Double?
+            public let cmd: String?
+        }
+
+        public struct Group: Decodable, Sendable, Hashable {
+            public let label: String
+            public let items: [Item]
+        }
+
+        public let id: String
+        public let title: String?
+        public let kind: ValueKind
+        public let groups: [Group]
+    }
+
+    struct MatrixBlock: Decodable, Sendable {
+        public let id: String
+        public let title: String?
+        public let rows: [String]
+        public let cols: [String]
+        public let values: [[Double?]]
+        public let kind: ValueKind
+        /// "diverging" (around `center`), "correlation" (−1…1) or "none".
+        public let scale: String
+        public let center: Double
+        public let rowCmds: [String?]?
+    }
+
+    struct ScatterBlock: Decodable, Sendable {
+        public struct Point: Decodable, Sendable, Hashable {
+            public let label: String
+            public let x: Double
+            public let y: Double
+            public let size: Double?
+            public let highlight: Bool?
+            public let cmd: String?
+        }
+
+        public let id: String
+        public let title: String?
+        public let xLabel: String
+        public let yLabel: String
+        public let xKind: ValueKind
+        public let yKind: ValueKind
+        public let points: [Point]
+    }
+
+    struct GraphBlock: Decodable, Sendable {
+        public struct Node: Decodable, Sendable, Hashable {
+            public let label: String
+            public let detail: String?
+            public let value: Double?
+            public let cmd: String?
+        }
+
+        public struct Group: Decodable, Sendable, Hashable {
+            public let title: String
+            public let side: String   // left | right | bottom
+            public let nodes: [Node]
+        }
+
+        public struct Center: Decodable, Sendable, Hashable {
+            public let label: String
+            public let detail: String?
+            public let lines: [String]?
+        }
+
+        public let id: String
+        public let title: String?
+        public let center: Center
+        public let groups: [Group]
+    }
+
+    struct BarsBlock: Decodable, Sendable {
+        public struct Item: Decodable, Sendable, Hashable {
+            public let label: String
+            public let value: Double
+            public let cmd: String?
+        }
+
+        public let id: String
+        public let title: String?
+        public let kind: ValueKind
+        public let items: [Item]
+    }
+
+    struct SeriesBlock: Decodable, Sendable {
+        public struct Line: Decodable, Sendable {
+            public let label: String
+            public let points: [[Double]]   // [t, v]
+        }
+
+        public let id: String
+        public let title: String?
+        public let kind: ValueKind
+        public let lines: [Line]
+    }
+
+    struct DonutBlock: Decodable, Sendable {
+        public struct Item: Decodable, Sendable, Hashable {
+            public let label: String
+            public let value: Double
+        }
+
+        public let id: String
+        public let title: String?
+        public let kind: ValueKind
+        public let items: [Item]
+    }
+
+    struct SparkGridBlock: Decodable, Sendable {
+        public struct Item: Decodable, Sendable, Hashable {
+            public let label: String
+            public let detail: String?
+            public let change: Double?
+            public let points: [Double]
+            public let cmd: String?
+        }
+
+        public let id: String
+        public let title: String?
+        public let items: [Item]
     }
 }
 

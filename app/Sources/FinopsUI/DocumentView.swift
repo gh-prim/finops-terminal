@@ -59,6 +59,14 @@ struct DocumentView: View {
                 case .text(let text): TextBlockView(block: text)
                 case .choices(let choices): ChoicesBar(block: choices, run: run)
                 case .kv(let kv): KVCard(block: kv)
+                case .treemap(let b): TreemapBlockView(block: b, run: run)
+                case .matrix(let b): MatrixBlockView(block: b, run: run)
+                case .scatter(let b): ScatterBlockView(block: b, run: run)
+                case .graph(let b): GraphBlockView(block: b, run: run)
+                case .bars(let b): BarsBlockView(block: b, run: run)
+                case .series(let b): SeriesBlockView(block: b)
+                case .donut(let b): DonutBlockView(block: b)
+                case .sparkgrid(let b): SparkGridBlockView(block: b, run: run)
                 case .unknown: EmptyView()
                 }
             }

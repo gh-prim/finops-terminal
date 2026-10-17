@@ -90,6 +90,91 @@ public enum Indicators {
     }
 }
 
+public extension Indicators {
+    /// Stochastic oscillator %K (smoothed over `smooth`) and %D.
+    static func stochastic(high: [Double], low: [Double], close: [Double], period: Int = 14, smooth: Int = 3,
+                           signal: Int = 3) -> (k: [Double?], d: [Double?]) {
+        let n = close.count
+        var raw = [Double?](repeating: nil, count: n)
+        for i in 0..<n where i >= period - 1 {
+            let hh = high[(i - period + 1)...i].max()!, ll = low[(i - period + 1)...i].min()!
+            raw[i] = hh == ll ? 50 : (close[i] - ll) / (hh - ll) * 100
+        }
+        let k = smoothOptional(raw, smooth)
+        return (k, smoothOptional(k, signal))
+    }
+
+    /// Wilder's Average True Range.
+    static func atr(high: [Double], low: [Double], close: [Double], period: Int = 14) -> [Double?] {
+        let n = close.count
+        guard n > period else { return Array(repeating: nil, count: n) }
+        var tr = [Double](repeating: 0, count: n)
+        for i in 0..<n {
+            let hl = high[i] - low[i]
+            tr[i] = i == 0 ? hl : max(hl, abs(high[i] - close[i - 1]), abs(low[i] - close[i - 1]))
+        }
+        var out = [Double?](repeating: nil, count: n)
+        var prev = tr[1...period].reduce(0, +) / Double(period)
+        out[period] = prev
+        for i in (period + 1)..<n {
+            prev = (prev * Double(period - 1) + tr[i]) / Double(period)
+            out[i] = prev
+        }
+        return out
+    }
+
+    /// On-balance volume.
+    static func obv(close: [Double], volume: [Double]) -> [Double?] {
+        var total = 0.0
+        return close.indices.map { i in
+            if i > 0 { total += close[i] > close[i - 1] ? volume[i] : (close[i] < close[i - 1] ? -volume[i] : 0) }
+            return total
+        }
+    }
+
+    /// Average Directional Index (Wilder).
+    static func adx(high: [Double], low: [Double], close: [Double], period: Int = 14) -> [Double?] {
+        let n = close.count
+        guard n > period * 2 else { return Array(repeating: nil, count: n) }
+        var tr = [Double](repeating: 0, count: n), plus = tr, minus = tr
+        for i in 1..<n {
+            let up = high[i] - high[i - 1], down = low[i - 1] - low[i]
+            plus[i] = up > down && up > 0 ? up : 0
+            minus[i] = down > up && down > 0 ? down : 0
+            tr[i] = max(high[i] - low[i], abs(high[i] - close[i - 1]), abs(low[i] - close[i - 1]))
+        }
+        var sTR = tr[1...period].reduce(0, +), sP = plus[1...period].reduce(0, +), sM = minus[1...period].reduce(0, +)
+        var dx = [Double?](repeating: nil, count: n)
+        for i in period..<n {
+            if i > period {
+                sTR = sTR - sTR / Double(period) + tr[i]
+                sP = sP - sP / Double(period) + plus[i]
+                sM = sM - sM / Double(period) + minus[i]
+            }
+            let pdi = sTR == 0 ? 0 : sP / sTR * 100, mdi = sTR == 0 ? 0 : sM / sTR * 100
+            dx[i] = pdi + mdi == 0 ? 0 : abs(pdi - mdi) / (pdi + mdi) * 100
+        }
+        var out = [Double?](repeating: nil, count: n)
+        let start = period * 2 - 1
+        var prev = dx[period...start].compactMap { $0 }.reduce(0, +) / Double(period)
+        out[start] = prev
+        for i in (start + 1)..<n {
+            prev = (prev * Double(period - 1) + (dx[i] ?? 0)) / Double(period)
+            out[i] = prev
+        }
+        return out
+    }
+
+    private static func smoothOptional(_ values: [Double?], _ period: Int) -> [Double?] {
+        values.indices.map { i in
+            guard i >= period - 1 else { return nil }
+            let window = values[(i - period + 1)...i]
+            guard window.allSatisfy({ $0 != nil }) else { return nil }
+            return window.compactMap { $0 }.reduce(0, +) / Double(period)
+        }
+    }
+}
+
 /// Chart options, round-tripped through command args so the command line and
 /// the toolbar always agree. e.g. `5Y CANDLE VOL SMA50 RSI VS MSFT,NVDA`
 public struct ChartConfig: Equatable, Sendable {
@@ -97,7 +182,9 @@ public struct ChartConfig: Equatable, Sendable {
     public enum Overlay: String, CaseIterable, Sendable {
         case sma20 = "SMA20", sma50 = "SMA50", sma200 = "SMA200", ema20 = "EMA20", bollinger = "BB"
     }
-    public enum Study: String, CaseIterable, Sendable { case rsi = "RSI", macd = "MACD" }
+    public enum Study: String, CaseIterable, Sendable {
+        case rsi = "RSI", macd = "MACD", stoch = "STOCH", atr = "ATR", obv = "OBV", adx = "ADX"
+    }
 
     public var range: ChartRange = .y1
     public var style: Style = .line

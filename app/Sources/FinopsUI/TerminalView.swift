@@ -43,6 +43,8 @@ public struct TerminalView: View {
                     .help("\(layout.rawValue) panel\(layout == .single ? "" : "s") (⌥⌘\(layout.rawValue))")
                     .accessibilityLabel("\(layout.rawValue) panels")
             }
+            Spacer().frame(width: 16)
+            MarketClocks()
             Spacer()
             if let message = model.message {
                 Text(message)
@@ -194,8 +196,12 @@ public struct TerminalCommands: Commands {
         CommandMenu("Function") {
             let security = FunctionID.allCases.filter { $0.group == .security }
             ForEach(Array(security.enumerated()), id: \.element) { index, function in
-                Button(function.title) { model?.open(function) }
-                    .keyboardShortcut(KeyEquivalent(Self.keys[index]), modifiers: .command)
+                if index < Self.keys.count {
+                    Button(function.title) { model?.open(function) }
+                        .keyboardShortcut(KeyEquivalent(Self.keys[index]), modifiers: .command)
+                } else {
+                    Button(function.title) { model?.open(function) }
+                }
             }
             Divider()
             ForEach(FunctionID.allCases.filter { $0.group != .security }, id: \.self) { function in

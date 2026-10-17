@@ -13,15 +13,27 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
     case hold = "HOLD"
     case file = "FILE"
     case opt = "OPT"
+    case rv = "RV"
+    case rels = "RELS"
+    case dcf = "DCF"
+    case sent = "SENT"
     // Market screens
     case mkt = "MKT"
     case movers = "MOVERS"
     case scrn = "SCRN"
     case econ = "ECON"
     case curve = "CURVE"
+    case heat = "HEAT"
+    case fxm = "FXM"
+    case wbi = "WBI"
+    case cbr = "CBR"
     // Tools
     case port = "PORT"
     case alert = "ALERT"
+    case perf = "PERF"
+    case charts = "CHARTS"
+    case corr = "CORR"
+    case quant = "QUANT"
     case help = "HELP"
 
     public enum Group: String, CaseIterable, Sendable {
@@ -32,9 +44,9 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
 
     public var group: Group {
         switch self {
-        case .quote, .chart, .desc, .news, .fin, .est, .evt, .hold, .file, .opt: .security
-        case .mkt, .movers, .scrn, .econ, .curve: .market
-        case .port, .alert, .help: .tools
+        case .quote, .chart, .desc, .news, .fin, .est, .evt, .hold, .file, .opt, .rv, .rels, .dcf, .sent: .security
+        case .mkt, .movers, .scrn, .econ, .curve, .heat, .fxm, .wbi, .cbr: .market
+        case .port, .alert, .perf, .charts, .corr, .quant, .help: .tools
         }
     }
 
@@ -57,6 +69,18 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .curve: ["CURVE"]
         case .port: ["PORT"]
         case .alert: ["ALERT"]
+        case .rv: ["RV"]
+        case .rels: ["RELS"]
+        case .dcf: ["DCF"]
+        case .sent: ["SENT"]
+        case .heat: ["HEAT", "IMAP"]
+        case .fxm: ["FXM", "FXC"]
+        case .wbi: ["WBI"]
+        case .cbr: ["CBR"]
+        case .perf: ["PERF"]
+        case .charts: ["CHARTS"]
+        case .corr: ["CORR"]
+        case .quant: ["QUANT", "CALC"]
         case .help: ["HELP", "?"]
         }
     }
@@ -80,6 +104,18 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .curve: "Yield curve"
         case .port: "Portfolio"
         case .alert: "Alerts"
+        case .rv: "Relative value"
+        case .rels: "Relationships"
+        case .dcf: "DCF valuation"
+        case .sent: "Sentiment"
+        case .heat: "Market heatmap"
+        case .fxm: "Currency matrix"
+        case .wbi: "World Bank"
+        case .cbr: "Central banks"
+        case .perf: "Performance"
+        case .charts: "Chart grid"
+        case .corr: "Correlation"
+        case .quant: "Quant calculators"
         case .help: "Help"
         }
     }
@@ -103,6 +139,18 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .curve: "US Treasury yield curve vs 1M, 6M and 1Y ago"
         case .port: "Portfolio with live P&L. <security> PORT ADD <qty> <cost>"
         case .alert: "Price alerts. <security> ALERT > <price> or ALERT < <price>"
+        case .rv: "Valuation scatter vs industry peers. Args: X Y among PE FPE EVEBITDA PS PB GROWTH MARGIN ROE RET1Y"
+        case .rels: "Relationship graph: industry peers, institutional holders, funds"
+        case .dcf: "Discounted cash flow from SEC filings. Args: W<wacc%> G<growth%> T<terminal%>"
+        case .sent: "Headline sentiment score from recent news"
+        case .heat: "Treemap of the largest US companies. Args: 1D 1W 1M 3M YTD 1Y, sector"
+        case .fxm: "Cross-rate matrix of major currencies, with 1-day moves"
+        case .wbi: "World Bank indicators by country. Args: GDP CPI UNEMP DEBT CA GDPPC SIZE"
+        case .cbr: "Central bank policy rates (FRED)"
+        case .perf: "Watchlist performance heat table (1D … 1Y, volatility)"
+        case .charts: "Small-multiple charts of the watchlist. Args: 5D 1M 3M 1Y"
+        case .corr: "Correlation matrix of the watchlist. Args: 3M 6M 1Y 2Y 5Y"
+        case .quant: "CFA-style calculators: time value, bonds, Black–Scholes options"
         case .help: "All functions and keys"
         }
     }
@@ -128,6 +176,18 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .curve: "chart.line.uptrend.xyaxis"
         case .port: "briefcase"
         case .alert: "bell"
+        case .rv: "circle.grid.cross"
+        case .rels: "point.3.connected.trianglepath.dotted"
+        case .dcf: "function"
+        case .sent: "face.smiling"
+        case .heat: "square.grid.3x3.fill"
+        case .fxm: "dollarsign.arrow.circlepath"
+        case .wbi: "globe.europe.africa"
+        case .cbr: "building.columns.circle"
+        case .perf: "tablecells.badge.ellipsis"
+        case .charts: "square.grid.2x2"
+        case .corr: "circle.hexagongrid"
+        case .quant: "x.squareroot"
         case .help: "questionmark.circle"
         }
     }

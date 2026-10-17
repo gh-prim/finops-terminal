@@ -29,6 +29,7 @@ from .devices import DeviceStore, PostgresDeviceStore
 from .hub import Hub
 from .providers import edgar, fred, yahoo
 from .providers import yahoo_research as research
+from .providers import views
 from .providers.http import HTTPError
 
 log = logging.getLogger(__name__)
@@ -216,6 +217,33 @@ class Connection:
                 return await asyncio.to_thread(fred.search, p.get("query", ""))
             case "curve":
                 return await asyncio.to_thread(fred.curve)
+            # Visual & analytics screens
+            case "heatmap":
+                return await asyncio.to_thread(views.heatmap, p.get("sector") or None, p.get("period", "1D").upper())
+            case "fxmatrix":
+                return await asyncio.to_thread(views.fx_matrix)
+            case "perf":
+                return await asyncio.to_thread(views.perf, p.get("securities", ""))
+            case "grid":
+                return await asyncio.to_thread(views.grid, p.get("securities", ""), p.get("range", "3M").upper())
+            case "corr":
+                return await asyncio.to_thread(views.correlation, p.get("securities", ""), p.get("range", "1Y").upper())
+            case "rv":
+                return await asyncio.to_thread(views.relative_value, symbol(), p.get("x", "FPE").upper(), p.get("y", "GROWTH").upper())
+            case "rels":
+                return await asyncio.to_thread(views.relationships, symbol())
+            case "dcf":
+                def pct(key: str) -> float | None:
+                    return float(p[key]) / 100 if p.get(key) else None
+                return await asyncio.to_thread(views.dcf, symbol(), pct("wacc"), pct("growth"), pct("terminal"))
+            case "portfolio":
+                return await asyncio.to_thread(views.portfolio, p.get("positions", ""))
+            case "worldbank":
+                return await asyncio.to_thread(views.world_bank, p.get("indicator", "GDP").upper())
+            case "centralbanks":
+                return await asyncio.to_thread(views.central_banks)
+            case "sentiment":
+                return await asyncio.to_thread(views.sentiment, symbol())
             case _:
                 raise ValueError(f"unknown service {service!r}")
 

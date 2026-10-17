@@ -207,7 +207,7 @@ struct ChartView: View {
                 .frame(height: 64)
             }
             ForEach(config.studies, id: \.self) { study in
-                studyChart(study, closes: closes, last: study == config.studies.last)
+                studyChart(study, bars: bars, last: study == config.studies.last)
                     .chartXScale(domain: domain)
                     .chartXAxis { xAxis(bars, ticks: ticks, labels: study == config.studies.last) }
                     .frame(height: 80)
@@ -314,8 +314,41 @@ struct ChartView: View {
     }
 
     @ViewBuilder
-    private func studyChart(_ study: ChartConfig.Study, closes: [Double], last: Bool) -> some View {
+    private func studyChart(_ study: ChartConfig.Study, bars: [Bar], last: Bool) -> some View {
+        let closes = bars.map(\.c)
+        let highs = bars.map { $0.h ?? $0.c }, lows = bars.map { $0.l ?? $0.c }
+        let at = hovered ?? (closes.count - 1)
         switch study {
+        case .stoch:
+            let s = Indicators.stochastic(high: highs, low: lows, close: closes)
+            Chart {
+                RuleMark(y: .value("Hi", 80)).foregroundStyle(Palette.muted.opacity(0.5)).lineStyle(StrokeStyle(dash: [3, 3]))
+                RuleMark(y: .value("Lo", 20)).foregroundStyle(Palette.muted.opacity(0.5)).lineStyle(StrokeStyle(dash: [3, 3]))
+                ForEach(points(s.k), id: \.0) { i, v in
+                    LineMark(x: .value("x", Double(i)), y: .value("%K", v), series: .value("S", "k")).foregroundStyle(Color(red: 0.16, green: 0.47, blue: 1.0))
+                }
+                ForEach(points(s.d), id: \.0) { i, v in
+                    LineMark(x: .value("x", Double(i)), y: .value("%D", v), series: .value("S", "d")).foregroundStyle(Palette.accent)
+                }
+                crosshairX
+            }
+            .chartYScale(domain: 0...100)
+            .chartYAxis { AxisMarks(position: .trailing, values: [20, 80]) }
+            .overlay(alignment: .topLeading) { studyLabel("STOCH 14,3,3", value: s.k[at]) }
+        case .atr:
+            single("ATR 14", Indicators.atr(high: highs, low: lows, close: closes), at: at, color: Color(red: 0.95, green: 0.55, blue: 0.25))
+        case .obv:
+            single("OBV", Indicators.obv(close: closes, volume: bars.map { $0.v ?? 0 }), at: at, color: Color(red: 0.30, green: 0.85, blue: 0.85))
+        case .adx:
+            Chart {
+                RuleMark(y: .value("Trend", 25)).foregroundStyle(Palette.muted.opacity(0.5)).lineStyle(StrokeStyle(dash: [3, 3]))
+                ForEach(points(Indicators.adx(high: highs, low: lows, close: closes)), id: \.0) { i, v in
+                    LineMark(x: .value("x", Double(i)), y: .value("ADX", v)).foregroundStyle(Color(red: 0.95, green: 0.85, blue: 0.35))
+                }
+                crosshairX
+            }
+            .chartYAxis { AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) }
+            .overlay(alignment: .topLeading) { studyLabel("ADX 14", value: Indicators.adx(high: highs, low: lows, close: closes)[at]) }
         case .rsi:
             let rsi = Indicators.rsi(closes)
             Chart {
@@ -355,6 +388,21 @@ struct ChartView: View {
             .chartYAxis { AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) }
             .overlay(alignment: .topLeading) { studyLabel("MACD 12/26/9", value: m.macd[hovered ?? (closes.count - 1)]) }
         }
+    }
+
+    private func single(_ title: String, _ values: [Double?], at: Int, color: Color) -> some View {
+        Chart {
+            ForEach(points(values), id: \.0) { i, v in
+                LineMark(x: .value("x", Double(i)), y: .value(title, v)).foregroundStyle(color)
+            }
+            crosshairX
+        }
+        .chartYAxis {
+            AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { _ in
+                AxisValueLabel(format: FloatingPointFormatStyle<Double>.number.notation(.compactName))
+            }
+        }
+        .overlay(alignment: .topLeading) { studyLabel(title, value: values[at]) }
     }
 
     private func studyLabel(_ title: String, value: Double?) -> some View {

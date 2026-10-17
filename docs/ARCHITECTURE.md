@@ -314,6 +314,29 @@ rows, so a click runs exactly the command a user would type.
 | `ALERT` | — | Price alerts with macOS notifications (`<sec> ALERT > 350`) | local + yfinance |
 | `WATCH` | — | `<sec> WATCH` adds to the current watchlist (multiple watchlists) | local |
 
+**Analytics screens** (gateway "visual" blocks: treemap, matrix, scatter, graph, bars, series,
+donut, sparkgrid — rendered natively, every element carries a command):
+
+| Command | Job | Inspired by | Source |
+|---|---|---|---|
+| `HEAT` | Treemap of the largest US companies by sector, coloured by 1D…1Y change | IMAP | yfinance sectors |
+| `FXM` | Cross-rate matrix of 8 major currencies with 1-day moves | FXC / WCRS | yfinance |
+| `PERF` | Watchlist return heat table (1D…1Y) + volatility | — | yfinance |
+| `CHARTS` | Small-multiple charts of the watchlist | Launchpad grids | yfinance |
+| `CORR` | Correlation matrix of the watchlist | CORR | yfinance |
+| `RV` | Valuation scatter vs industry peers (choose axes) | RV | yfinance |
+| `RELS` | Hub-and-spoke graph: industry peers, institutions, funds | SPLC (public data only) | yfinance |
+| `DCF` | Two-stage DCF from SEC cash flows, sensitivity matrix | DCF | EDGAR + Yahoo |
+| `SENT` | Headline sentiment (finance lexicon) | — | Yahoo news |
+| `WBI` | World Bank indicators by country | ECWB | World Bank API |
+| `CBR` | Central bank policy rates | WIRP/CBRT | FRED |
+| `QUANT` | TVM/NPV/IRR, bond price/YTM/duration/convexity, Black–Scholes + Greeks | CFA quant | on device |
+| `PORT RISK` | Sharpe, beta, VaR 95/99, drawdown, sector donut, correlation, growth vs S&P | PORT | yfinance |
+
+Chart studies: RSI, MACD, Stochastic, ATR, OBV, ADX (TA-Lib-equivalent, computed on device).
+Not available from free sources: supplier/customer exposures (SPLC), Reddit (needs OAuth app),
+X (paid API), Polymarket (blocked in France).
+
 Workspace: 1, 2 or 4 panels (⌥⌘1/2/4). Linked panels follow the security loaded in any
 other linked panel. ⌘1…⌘0 open the security functions in the active panel. Tables sort
 by column, copy as TSV and export CSV.

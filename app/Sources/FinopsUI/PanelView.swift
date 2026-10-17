@@ -86,6 +86,37 @@ struct PanelView: View {
         }
     }
 
+    /// The current watchlist, or securities given as args ("PERF AAPL,MSFT").
+    private func watchlistParam(_ args: [String]) -> String {
+        args.isEmpty ? model.watchlist.joined(separator: ";") : args.joined(separator: " ")
+    }
+
+    private var positionsParam: String {
+        model.positions.map { "\($0.security)|\($0.quantity)" }.joined(separator: ";")
+    }
+
+    /// DCF args like W9 G10 T2.5 → service params (percent numbers).
+    private func dcfParams(security: String, args: [String]) -> [String: String] {
+        var params = ["security": security]
+        for arg in args {
+            guard let key = ["W": "wacc", "G": "growth", "T": "terminal"][String(arg.prefix(1))],
+                  Double(arg.dropFirst()) != nil else { continue }
+            params[key] = String(arg.dropFirst())
+        }
+        return params
+    }
+
+    private func portfolioTabs(risk: Bool) -> some View {
+        HStack(spacing: 4) {
+            Button("Positions") { run("PORT") }.buttonStyle(TerminalButtonStyle(selected: !risk))
+            Button("Risk & analytics") { run("PORT RISK") }.buttonStyle(TerminalButtonStyle(selected: risk))
+                .disabled(model.positions.isEmpty)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+    }
+
     private var stateKey: String {
         "\(model.clientGeneration)|\(state.security ?? "")|\(state.function.rawValue)|\(state.args.joined(separator: " "))"
     }
@@ -140,8 +171,44 @@ struct PanelView: View {
             }
         case .curve:
             CurveView(client: client)
+        case .port where args.first == "RISK":
+            VStack(spacing: 0) {
+                portfolioTabs(risk: true)
+                DocumentView(client: client, service: "portfolio", params: ["positions": positionsParam], run: run)
+            }
         case .port:
-            PortfolioView(model: model, run: run)
+            VStack(spacing: 0) {
+                portfolioTabs(risk: false)
+                PortfolioView(model: model, run: run)
+            }
+        case .rv:
+            DocumentView(client: client, service: "rv", params: ["security": security, "x": args.first ?? "FPE",
+                                                                  "y": args.dropFirst().first ?? "GROWTH"], run: run)
+        case .rels:
+            DocumentView(client: client, service: "rels", params: ["security": security], run: run)
+        case .dcf:
+            DocumentView(client: client, service: "dcf", params: dcfParams(security: security, args: args), run: run)
+        case .sent:
+            DocumentView(client: client, service: "sentiment", params: ["security": security], run: run)
+        case .heat:
+            DocumentView(client: client, service: "heatmap", params: [
+                "period": args.first { ["1D", "1W", "1M", "3M", "YTD", "1Y"].contains($0) } ?? "1D",
+                "sector": args.first { !["1D", "1W", "1M", "3M", "YTD", "1Y"].contains($0) } ?? "",
+            ], run: run)
+        case .fxm:
+            DocumentView(client: client, service: "fxmatrix", params: [:], run: run)
+        case .wbi:
+            DocumentView(client: client, service: "worldbank", params: ["indicator": args.first ?? "GDP"], run: run)
+        case .cbr:
+            DocumentView(client: client, service: "centralbanks", params: [:], run: run)
+        case .perf:
+            DocumentView(client: client, service: "perf", params: ["securities": watchlistParam(args)], run: run)
+        case .charts:
+            DocumentView(client: client, service: "grid", params: ["securities": watchlistParam([]), "range": args.first ?? "3M"], run: run)
+        case .corr:
+            DocumentView(client: client, service: "corr", params: ["securities": watchlistParam([]), "range": args.first ?? "1Y"], run: run)
+        case .quant:
+            QuantView()
         case .alert:
             AlertsView(model: model, defaultSecurity: state.security)
         case .help:
