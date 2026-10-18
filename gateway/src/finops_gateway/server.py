@@ -24,10 +24,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from . import securities
+from .securities import split_pair
 from .config import settings
 from .devices import DeviceStore, PostgresDeviceStore
 from .hub import Hub
-from .providers import binance, edgar, fred, yahoo
+from .providers import binance, crypto_news, edgar, fred, yahoo
 from .providers import yahoo_research as research
 from .providers import views
 from .providers.http import HTTPError
@@ -195,6 +196,10 @@ class Connection:
             case "profile":
                 return await asyncio.to_thread(research.profile, symbol())
             case "news":
+                if p.get("security") and (sec := securities.resolve(p["security"])).provider == "binance":
+                    return await asyncio.to_thread(crypto_news.news, split_pair(sec.symbol)[0])
+                if p.get("query", "").strip().upper() in ("CRYPTO", "CRYPTOS"):
+                    return await asyncio.to_thread(crypto_news.news)
                 query = symbol() if p.get("security") else (p.get("query") or "stock market")
                 return await asyncio.to_thread(research.news, query)
             case "estimates":

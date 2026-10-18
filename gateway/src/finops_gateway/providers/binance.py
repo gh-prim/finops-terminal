@@ -198,6 +198,8 @@ def market(quote_asset: str = "USDT", count: int = 100) -> dict[str, Any]:
         rows.append(row([base, NAMES.get(base, ""), _f(t["lastPrice"]), _f(t["priceChangePercent"]),
                          _f(t["highPrice"]), _f(t["lowPrice"]), _f(t["quoteVolume"]), t.get("count")],
                         cmd=pair_cmd(base)))
+    from .crypto_news import latest  # late import: crypto_news imports NAMES from here
+    news_rows = [row([i["time"], i["title"], i["publisher"]], url=i["link"]) for i in latest(8)]
     up = sum(1 for t in listed if (_f(t["priceChangePercent"]) or 0) > 0)
     movers = sorted(top[:60], key=lambda t: -(_f(t["priceChangePercent"]) or 0))
     return document("Crypto market", [
@@ -210,12 +212,14 @@ def market(quote_asset: str = "USDT", count: int = 100) -> dict[str, Any]:
         bars("gainers", "Best and worst 24h (among the 60 most traded)",
              [{"label": split_pair(t["symbol"])[0], "value": _f(t["priceChangePercent"]),
                "cmd": f"{pair_cmd(split_pair(t['symbol'])[0])} CHART"} for t in movers[:8] + movers[-8:]], kind="pctchange"),
+        table("headlines", "Latest headlines · NEWS CRYPTO for more", [
+            column("time", "Time", "datetime"), column("title", "Headline"), column("source", "Source")], news_rows),
         table("pairs", f"Top {len(rows)} {quote_asset} pairs by 24h volume", [
             column("sym", "Coin"), column("name", "Name"), column("last", "Last", "price"),
             column("chg", "24h", "pctchange"), column("hi", "24h high", "price"), column("lo", "24h low", "price"),
             column("vol", f"Volume {quote_asset}", "compact"), column("n", "Trades", "compact"),
         ], rows),
-    ], SOURCE, notes=["Live: refreshes every 10 s. Click a coin for its order book, a tile for its chart."],
+    ], SOURCE, notes=["Live: refreshes every 10 s. Click a coin for its order book, a tile for its chart, a headline to read it."],
         refresh=10)
 
 
