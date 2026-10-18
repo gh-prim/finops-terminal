@@ -199,11 +199,24 @@ struct TableBlockView: View {
     @Environment(\.openURL) private var openURL
     @State private var sortColumn: Int?
     @State private var ascending = false
-    @State private var hovered: Int?
 
     private static let charWidth: CGFloat = 7.4
+    static let rowHeight: CGFloat = 22
+    private static let maxBodyHeight: CGFloat = 560
+
+    /// Everything a row needs, computed once per sort (not per cell, not per hover).
+    struct PreparedRow: Identifiable {
+        let id: Int
+        let texts: [String]
+        let colors: [Color]
+        let trailing: [Bool]
+        let row: GatewayDocument.Row
+        var clickable: Bool { row.cmd != nil || row.url != nil }
+    }
 
     var body: some View {
+        let rows = prepared(sortedRows)
+        let widths = columnWidths(rows)
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 if let title = table.title { SectionLabel(title: title) }
@@ -226,32 +239,48 @@ struct TableBlockView: View {
                 .accessibilityLabel("Export CSV")
                 #endif
             }
+            // Horizontal scroll moves header and rows together; rows scroll vertically under a frozen header.
             ScrollView(.horizontal) {
                 VStack(alignment: .leading, spacing: 0) {
-                    header
+                    header(widths)
                     Divider().overlay(Palette.border)
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(sortedRows.enumerated()), id: \.offset) { index, row in
-                            rowView(row, index: index)
+                    ScrollView(.vertical) {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(rows) { row in
+                                TableRowView(row: row, widths: widths, striped: row.id.isMultiple(of: 2)) { activate(row.row) }
+                            }
                         }
                     }
+                    .frame(height: min(CGFloat(rows.count) * Self.rowHeight, Self.maxBodyHeight))
                 }
             }
         }
     }
 
-    private var widths: [CGFloat] {
-        table.columns.enumerated().map { index, column in
-            let longest = table.rows.prefix(200).reduce(column.label.count) { width, row in
-                guard index < row.cells.count else { return width }
-                return max(width, Format.value(row.cells[index], kind: kind(for: row, column: index)).count)
+    private func prepared(_ rows: [GatewayDocument.Row]) -> [PreparedRow] {
+        rows.enumerated().map { index, row in
+            let clickable = row.cmd != nil || row.url != nil
+            var texts: [String] = [], colors: [Color] = [], trailing: [Bool] = []
+            for col in table.columns.indices {
+                let value = col < row.cells.count ? row.cells[col] : .null
+                let k = kind(for: row, column: col)
+                texts.append(Format.value(value, kind: k))
+                colors.append(col == 0 && clickable ? Palette.accent : Format.color(value, kind: k))
+                trailing.append(Format.isNumeric(k))
             }
+            return PreparedRow(id: index, texts: texts, colors: colors, trailing: trailing, row: row)
+        }
+    }
+
+    private func columnWidths(_ rows: [PreparedRow]) -> [CGFloat] {
+        table.columns.enumerated().map { index, column in
+            let longest = rows.prefix(300).reduce(column.label.count) { max($0, $1.texts[index].count) }
             let cap = column.kind == .text ? 70 : 18
             return CGFloat(min(longest, cap)) * Self.charWidth + 18
         }
     }
 
-    private var header: some View {
+    private func header(_ widths: [CGFloat]) -> some View {
         HStack(spacing: 0) {
             ForEach(Array(table.columns.enumerated()), id: \.offset) { index, column in
                 Button {
@@ -262,7 +291,7 @@ struct TableBlockView: View {
                         if sortColumn == index { Image(systemName: ascending ? "chevron.up" : "chevron.down") }
                     }
                     .font(.terminalLabel)
-                    .foregroundStyle(Palette.muted)
+                    .foregroundStyle(sortColumn == index ? Palette.accent : Palette.muted)
                     .frame(width: widths[index], alignment: Format.isNumeric(column.kind) ? .trailing : .leading)
                     .padding(.horizontal, 4)
                     .contentShape(Rectangle())
@@ -272,38 +301,12 @@ struct TableBlockView: View {
             }
         }
         .padding(.vertical, 5)
+        .background(Palette.surface)
     }
 
     private func kind(for row: GatewayDocument.Row, column index: Int) -> ValueKind {
         if index > 0, let override = row.kind { return override }
         return table.columns[index].kind
-    }
-
-    private func rowView(_ row: GatewayDocument.Row, index: Int) -> some View {
-        let clickable = row.cmd != nil || row.url != nil
-        return HStack(spacing: 0) {
-            ForEach(Array(table.columns.enumerated()), id: \.offset) { col, column in
-                let value = col < row.cells.count ? row.cells[col] : .null
-                let k = kind(for: row, column: col)
-                Text(Format.value(value, kind: k))
-                    .foregroundStyle(col == 0 && clickable ? Palette.accent : Format.color(value, kind: k))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .monospacedDigit()
-                    .frame(width: widths[col], alignment: Format.isNumeric(k) ? .trailing : .leading)
-                    .padding(.horizontal, 4)
-            }
-        }
-        .font(.system(size: 12, design: .monospaced))
-        .padding(.vertical, 3)
-        .background(hovered == index && clickable ? Palette.raised : (index.isMultiple(of: 2) ? .clear : Palette.surface.opacity(0.5)))
-        .contentShape(Rectangle())
-        .onHover { hovered = $0 ? index : (hovered == index ? nil : hovered) }
-        .onTapGesture { activate(row) }
-        .help(row.cmd ?? row.url ?? "")
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(clickable ? .isButton : [])
-        .accessibilityAction { activate(row) }
     }
 
     private func activate(_ row: GatewayDocument.Row) {
@@ -369,6 +372,38 @@ struct TableBlockView: View {
         }
     }
     #endif
+}
+
+/// One table row; it owns its hover state so hovering doesn't redraw the whole table.
+private struct TableRowView: View {
+    let row: TableBlockView.PreparedRow
+    let widths: [CGFloat]
+    let striped: Bool
+    let activate: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(row.texts.indices, id: \.self) { col in
+                Text(row.texts[col])
+                    .foregroundStyle(row.colors[col])
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .monospacedDigit()
+                    .frame(width: widths[col], alignment: row.trailing[col] ? .trailing : .leading)
+                    .padding(.horizontal, 4)
+            }
+        }
+        .font(.system(size: 12, design: .monospaced))
+        .frame(height: TableBlockView.rowHeight)
+        .background(hovering && row.clickable ? Palette.raised : (striped ? .clear : Palette.surface.opacity(0.5)))
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .onTapGesture(perform: activate)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(row.clickable ? .isButton : [])
+        .accessibilityAction { activate() }
+    }
 }
 
 /// CSV payload for the iPad share sheet.

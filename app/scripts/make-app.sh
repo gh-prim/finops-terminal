@@ -41,5 +41,9 @@ cat > "$bundle/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
-codesign --force --sign - "$bundle" >/dev/null
+# Sign with a stable identity (Apple Development certificate) so the Keychain recognises the app
+# across rebuilds ("Always Allow" sticks). Falls back to ad-hoc signing when no certificate exists.
+identity=$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development/ {print $2; exit}')
+codesign --force --sign "${identity:--}" "$bundle" >/dev/null
+echo "signed with: ${identity:-ad-hoc}" >&2
 echo "$bundle"

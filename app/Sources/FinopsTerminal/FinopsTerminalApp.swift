@@ -73,6 +73,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Notifier.post(title: title, body: body)
             NSSound.beep()
         }
+        // Touch ID before touching stored credentials (backend token, API keys).
+        let hasSecrets = Self.backendHost.map(RemoteLink.hasToken(for:)) ?? false || AppSettings.hasFredApiKey
+        if hasSecrets, !(await SecretsGate.unlock()) {
+            model.show(message: "Credentials locked — using local data without the backend. Reopen Settings → Backend to retry.")
+            await useLocal(model, unlockedSecrets: false)
+            return
+        }
         if let host = Self.backendHost, RemoteLink.hasToken(for: host), await useBackend(host, model: model) {
             return
         }
@@ -85,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Connect to the backend (pairing with `code` when given). Returns true on success.
     @discardableResult
     func useBackend(_ host: RemoteHost, code: String? = nil, model: TerminalModel) async -> Bool {
+        guard await SecretsGate.unlock() else { return false }
         await backendLink.connect(to: host, code: code)
         guard case .connected = backendLink.phase, let client = backendLink.client, let url = host.url else { return false }
         self.client = client
@@ -98,7 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// `fromWatchdog`: the backend dropped; keep the watchdog alive so it can switch back.
-    func useLocal(_ model: TerminalModel, fromWatchdog: Bool = false) async {
+    func useLocal(_ model: TerminalModel, fromWatchdog: Bool = false, unlockedSecrets: Bool = true) async {
         if !fromWatchdog { watchdog?.cancel() }
         backendLink.disconnect()
         if localGatewayURL != nil, model.dataSource == "local" { return }  // already on the local sidecar
@@ -109,7 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.client = client
             localGatewayURL = url
             model.connected(to: client, source: "local")
-            await model.pushSettings()
+            if unlockedSecrets { await model.pushSettings() }
             startRemote(model: model, gatewayURL: url, hello: nil)
         } catch {
             model.failed(error.localizedDescription)

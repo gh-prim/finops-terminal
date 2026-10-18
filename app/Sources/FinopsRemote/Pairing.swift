@@ -60,6 +60,15 @@ public enum RemoteKeychain {
         return String(decoding: data, as: UTF8.self)
     }
 
+    /// Whether an item exists, without reading its secret (no Keychain access prompt).
+    public static func exists(_ account: String) -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+            kSecAttrAccount as String: account, kSecReturnAttributes as String: true,
+        ]
+        return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
+    }
+
     public static func set(_ value: String?, for account: String) {
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,

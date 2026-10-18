@@ -114,7 +114,7 @@ public final class RemoteLink {
     }
 
     public static func hasToken(for host: RemoteHost) -> Bool {
-        RemoteKeychain.get("token:\(host.name)") != nil
+        RemoteKeychain.exists("token:\(host.name)")
     }
 
     public static func forgetToken(for host: RemoteHost) {
