@@ -46,3 +46,10 @@ struct CommandParserExtendedTests {
         #expect(Set(all).count == all.count)
     }
 }
+
+struct TVCommandTests {
+    @Test func tvKeepsVideoIdCase() {
+        #expect(CommandParser.parse("tv QB5BNdBFujE") == .run(security: nil, function: .tv, args: ["QB5BNdBFujE"]))
+        #expect(CommandParser.parse("ETF top") == .run(security: nil, function: .etf, args: ["TOP"]))
+    }
+}

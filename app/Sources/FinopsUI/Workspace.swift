@@ -189,8 +189,9 @@ public final class TerminalModel {
     public func open(_ function: FunctionID, in panel: PanelModel? = nil) {
         let panel = panel ?? activePanel
         activate(panel)
-        apply(.run(security: nil, function: function, args: function == panel.state.function ? panel.state.args : []),
-              to: panel)
+        // From the menu or sidebar, ETF opens the ETF market; "<etf> ETF" (typed or clicked) opens a fund.
+        let args = function == panel.state.function ? panel.state.args : (function == .etf ? ["TOP"] : [])
+        apply(.run(security: nil, function: function, args: args), to: panel)
     }
 
     /// Replace a panel's args (toolbar toggles, range buttons).

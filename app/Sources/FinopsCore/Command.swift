@@ -27,6 +27,9 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
     case fxm = "FXM"
     case wbi = "WBI"
     case cbr = "CBR"
+    case ecal = "ECAL"
+    case etf = "ETF"
+    case tv = "TV"
     // Tools
     case port = "PORT"
     case alert = "ALERT"
@@ -45,7 +48,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
     public var group: Group {
         switch self {
         case .quote, .chart, .desc, .news, .fin, .est, .evt, .hold, .file, .opt, .rv, .rels, .dcf, .sent: .security
-        case .mkt, .movers, .scrn, .econ, .curve, .heat, .fxm, .wbi, .cbr: .market
+        case .mkt, .movers, .scrn, .econ, .curve, .heat, .fxm, .wbi, .cbr, .ecal, .etf, .tv: .market
         case .port, .alert, .perf, .charts, .corr, .quant, .help: .tools
         }
     }
@@ -77,6 +80,9 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .fxm: ["FXM", "FXC"]
         case .wbi: ["WBI"]
         case .cbr: ["CBR"]
+        case .ecal: ["ECAL"]
+        case .etf: ["ETF"]
+        case .tv: ["TV", "BTV"]
         case .perf: ["PERF"]
         case .charts: ["CHARTS"]
         case .corr: ["CORR"]
@@ -112,6 +118,9 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .fxm: "Currency matrix"
         case .wbi: "World Bank"
         case .cbr: "Central banks"
+        case .ecal: "Economic calendar"
+        case .etf: "ETFs"
+        case .tv: "Live TV"
         case .perf: "Performance"
         case .charts: "Chart grid"
         case .corr: "Correlation"
@@ -147,6 +156,9 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .fxm: "Cross-rate matrix of major currencies, with 1-day moves"
         case .wbi: "World Bank indicators by country. Args: GDP CPI UNEMP DEBT CA GDPPC SIZE"
         case .cbr: "Central bank policy rates (FRED)"
+        case .ecal: "Economic releases (actual/expected/previous) and earnings. Args: ECO|EARN, TODAY|WEEK|2WEEKS, region"
+        case .etf: "ETF market (TOP, PERFORMERS), or <etf> ETF for holdings, sectors, costs"
+        case .tv: "Live business TV (Bloomberg on YouTube). Args: BLOOMBERG, BLOOMBERG-LIVE or a YouTube video ID"
         case .perf: "Watchlist performance heat table (1D … 1Y, volatility)"
         case .charts: "Small-multiple charts of the watchlist. Args: 5D 1M 3M 1Y"
         case .corr: "Correlation matrix of the watchlist. Args: 3M 6M 1Y 2Y 5Y"
@@ -184,6 +196,9 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .fxm: "dollarsign.arrow.circlepath"
         case .wbi: "globe.europe.africa"
         case .cbr: "building.columns.circle"
+        case .ecal: "calendar.badge.clock"
+        case .etf: "chart.pie"
+        case .tv: "play.tv"
         case .perf: "tablecells.badge.ellipsis"
         case .charts: "square.grid.2x2"
         case .corr: "circle.hexagongrid"
@@ -210,7 +225,8 @@ public enum Command: Equatable, Sendable {
 
 public enum CommandParser {
     public static func parse(_ input: String) -> Command {
-        let tokens = input.uppercased().split(whereSeparator: \.isWhitespace).map(String.init)
+        let original = input.split(whereSeparator: \.isWhitespace).map(String.init)
+        let tokens = original.map { $0.uppercased() }
         guard !tokens.isEmpty else { return .empty }
 
         if tokens.count == 1, let n = Int(tokens[0]), n > 0 {
@@ -225,11 +241,9 @@ public enum CommandParser {
         // Noun first, then verb: everything before the first function alias is the security.
         if let index = tokens.firstIndex(where: { FunctionID.matching($0) != nil }) {
             let security = tokens[..<index].joined(separator: " ")
-            return .run(
-                security: security.isEmpty ? nil : security,
-                function: FunctionID.matching(tokens[index]),
-                args: Array(tokens[(index + 1)...])
-            )
+            let function = FunctionID.matching(tokens[index])
+            let args = function == .tv ? Array(original[(index + 1)...]) : Array(tokens[(index + 1)...])
+            return .run(security: security.isEmpty ? nil : security, function: function, args: args)
         }
         return .run(security: tokens.joined(separator: " "), function: nil, args: [])
     }

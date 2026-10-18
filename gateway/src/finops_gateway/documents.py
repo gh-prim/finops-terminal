@@ -94,7 +94,9 @@ def document(title: str, blocks: list[dict[str, Any]], source: str, subtitle: st
     return {
         "title": title,
         "subtitle": subtitle,
-        "blocks": [b for b in blocks if b.get("type") != "table" or b["rows"]],
+        # Drop empty tables and key/value cards (e.g. valuation fields don't exist for an index).
+        "blocks": [b for b in blocks if not (b.get("type") == "table" and not b["rows"])
+                   and not (b.get("type") == "kv" and not b["items"])],
         "source": source,
         "notes": notes or [],
         "asOf": time.time(),

@@ -176,9 +176,10 @@ class Connection:
             case "lookup":
                 return await asyncio.to_thread(yahoo.lookup, p.get("query", ""))
             case "config":
-                if "edgarContact" in p:
+                # Empty values never erase a key configured on the server (.env).
+                if p.get("edgarContact", "").strip():
                     settings.edgar_contact = p["edgarContact"].strip()
-                if "fredApiKey" in p:
+                if p.get("fredApiKey", "").strip():
                     settings.fred_api_key = p["fredApiKey"].strip()
                     fred.dashboard.cache_clear()
                 return {"ok": True, "fred": bool(settings.fred_api_key)}
@@ -243,6 +244,13 @@ class Connection:
                 return await asyncio.to_thread(views.world_bank, p.get("indicator", "GDP").upper())
             case "centralbanks":
                 return await asyncio.to_thread(views.central_banks)
+            case "etf":
+                if p.get("security"):
+                    return await asyncio.to_thread(views.etf, symbol())
+                return await asyncio.to_thread(views.etf_market, p.get("list", "TOP").upper())
+            case "calendar":
+                return await asyncio.to_thread(views.calendar, p.get("kind", "ECO").upper(), p.get("span", "WEEK").upper(),
+                                               p.get("region", "MAJOR").upper())
             case "sentiment":
                 return await asyncio.to_thread(views.sentiment, symbol())
             case _:

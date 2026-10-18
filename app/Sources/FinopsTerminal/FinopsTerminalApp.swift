@@ -89,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard case .connected = backendLink.phase, let client = backendLink.client, let url = host.url else { return false }
         self.client = client
         model.connected(to: client, source: "backend")
+        await model.pushSettings()  // keys saved on this Mac also reach the backend (until it restarts; .env persists)
         startRemote(model: model, gatewayURL: url, hello: backendLink.authHello(for: host))
         gateway.stop()  // the backend replaces the local sidecar
         localGatewayURL = nil

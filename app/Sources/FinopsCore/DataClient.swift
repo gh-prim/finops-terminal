@@ -91,8 +91,13 @@ public actor DataClient {
         try await request("curve", [:], as: YieldCurves.self)
     }
 
+    /// Push provider settings. Empty values are omitted so they never erase what the server already has.
     public func configure(edgarContact: String, fredApiKey: String) async throws {
-        _ = try await request("config", ["edgarContact": edgarContact, "fredApiKey": fredApiKey], as: ConfigAck.self)
+        var params: [String: String] = [:]
+        if !edgarContact.isEmpty { params["edgarContact"] = edgarContact }
+        if !fredApiKey.isEmpty { params["fredApiKey"] = fredApiKey }
+        guard !params.isEmpty else { return }
+        _ = try await request("config", params, as: ConfigAck.self)
     }
 
     // MARK: Subscriptions

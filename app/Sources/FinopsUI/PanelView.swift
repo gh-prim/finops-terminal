@@ -209,6 +209,18 @@ struct PanelView: View {
             DocumentView(client: client, service: "corr", params: ["securities": watchlistParam([]), "range": args.first ?? "1Y"], run: run)
         case .quant:
             QuantView()
+        case .tv:
+            TVView(args: args, run: run)
+        case .etf where args.isEmpty && !security.isEmpty:
+            DocumentView(client: client, service: "etf", params: ["security": security], run: run)
+        case .etf:
+            DocumentView(client: client, service: "etf", params: ["list": args.first ?? "TOP"], run: run)
+        case .ecal:
+            DocumentView(client: client, service: "calendar", params: [
+                "kind": args.contains("EARN") ? "EARN" : "ECO",
+                "span": args.first { ["TODAY", "WEEK", "2WEEKS"].contains($0) } ?? "WEEK",
+                "region": args.first { !["ECO", "EARN", "TODAY", "WEEK", "2WEEKS"].contains($0) } ?? "MAJOR",
+            ], run: run)
         case .alert:
             AlertsView(model: model, defaultSecurity: state.security)
         case .help:

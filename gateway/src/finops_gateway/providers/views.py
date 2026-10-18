@@ -15,7 +15,7 @@ import yfinance as yf
 from .. import analytics as qa
 from .. import securities
 from ..cache import ttl_cache
-from ..documents import (bars, choices, column, document, donut, graph, kv, matrix, row, scatter, series,
+from ..documents import (bars, cell, choices, column, document, donut, graph, kv, matrix, row, scatter, series,
                          sparkgrid, table, text, treemap)
 from . import edgar, fred
 from .http import get_json
@@ -534,3 +534,165 @@ def sentiment(symbol: str) -> dict[str, Any]:
         "Lexicon scoring of headlines only. Reddit needs API credentials, X a paid API, and Polymarket is blocked in France, "
         "so they aren't included.",
     ])
+
+
+# MARK: ETF — fund profile and the ETF market
+
+SECTOR_NAMES = {
+    "technology": "Technology", "financial_services": "Financials", "healthcare": "Healthcare",
+    "consumer_cyclical": "Consumer cyclical", "communication_services": "Communication", "industrials": "Industrials",
+    "consumer_defensive": "Consumer defensive", "energy": "Energy", "basic_materials": "Materials",
+    "realestate": "Real estate", "utilities": "Utilities",
+}
+ETF_LISTS = {"TOP": ("top_etfs_us", "Popular US ETFs"), "PERFORMERS": ("top_performing_etfs", "Top performing ETFs")}
+
+
+@ttl_cache(3600, maxsize=64)
+@_retry_locked
+def etf(symbol: str) -> dict[str, Any]:
+    t = yf.Ticker(symbol)
+    i = info(symbol)
+    if i.get("quoteType") not in ("ETF", "MUTUALFUND"):
+        raise LookupError(f"{symbol} is not an ETF. Try ETF with no security for the ETF market, e.g. SPY ETF.")
+    fd = t.funds_data
+    overview = fd.fund_overview or {}
+    ops = fd.fund_operations
+    category_avg = ops["Category Average"].to_dict() if isinstance(ops, pd.DataFrame) and "Category Average" in ops else {}
+    holdings = fd.top_holdings if isinstance(fd.top_holdings, pd.DataFrame) else pd.DataFrame()
+    syms = [s for s in holdings.index if isinstance(s, str) and s]
+    prices = _cached_closes(tuple(syms), "5d") if syms else pd.DataFrame()
+
+    blocks: list[dict[str, Any]] = [
+        kv("Fund", [
+            ("Name", i.get("longName") or i.get("shortName"), "text"),
+            ("Issuer", overview.get("family") or i.get("fundFamily"), "text"),
+            ("Category", overview.get("categoryName") or i.get("category"), "text"),
+            ("Net assets", i.get("totalAssets"), "compact"),
+            ("NAV", i.get("navPrice"), "price"),
+            ("Inception", i.get("fundInceptionDate"), "date"),
+        ]),
+        kv("Costs & income", [
+            ("Expense ratio", i.get("netExpenseRatio"), "percent"),
+            ("Category average", (category_avg.get("Annual Report Expense Ratio") or 0) * 100 or None, "percent"),
+            ("Turnover", _pct_or_none(ops.loc["Annual Holdings Turnover", symbol]) if isinstance(ops, pd.DataFrame)
+             and symbol in ops and "Annual Holdings Turnover" in ops.index else None, "percent"),
+            ("Distribution yield", (i.get("yield") or 0) * 100 or None, "percent"),
+        ]),
+        kv("Returns", [
+            ("YTD", i.get("ytdReturn"), "pctchange"),
+            ("3-year average", _pct_or_none(i.get("threeYearAverageReturn")), "pctchange"),
+            ("5-year average", _pct_or_none(i.get("fiveYearAverageReturn")), "pctchange"),
+            ("Beta (3y)", i.get("beta3Year"), "number"),
+        ]),
+    ]
+    if syms:
+        blocks.append(treemap("holdings", f"Top {len(syms)} holdings · area = weight · colour = 1D change", [{
+            "label": "Holdings",
+            "items": [{"label": s, "detail": holdings.loc[s, "Name"], "weight": float(holdings.loc[s, "Holding Percent"]),
+                       "value": period_return(prices[s], 1) if s in prices else None, "cmd": f"{s} CHART"} for s in syms],
+        }]))
+        blocks.append(table("top", "Top holdings", [column("sym", "Symbol"), column("name", "Name"),
+                                                    column("w", "Weight", "percent"), column("chg", "1D", "pctchange")],
+                            [row([s, holdings.loc[s, "Name"], float(holdings.loc[s, "Holding Percent"]) * 100,
+                                  period_return(prices[s], 1) if s in prices else None], cmd=f"{s} DESC") for s in syms]))
+    sectors = fd.sector_weightings or {}
+    if any(sectors.values()):
+        blocks.append(donut("sectors", "Sector weights", [{"label": SECTOR_NAMES.get(k, k), "value": v * 100}
+                                                         for k, v in sorted(sectors.items(), key=lambda kv: -kv[1]) if v]))
+    classes = fd.asset_classes or {}
+    if any(classes.values()):
+        blocks.append(bars("assets", "Asset classes", [{"label": k.replace("Position", "").title(), "value": v * 100}
+                                                      for k, v in classes.items() if v], kind="percent"))
+    if fd.description:
+        blocks.append(text("Objective", fd.description))
+    return document(f"ETF — {i.get('shortName') or symbol}", blocks, SOURCE, subtitle=symbol)
+
+
+def _pct_or_none(value: Any) -> float | None:
+    return float(value) * 100 if isinstance(value, int | float) and value == value else None
+
+
+@ttl_cache(300, maxsize=8)
+@_retry_locked
+def etf_market(kind: str) -> dict[str, Any]:
+    kind = kind if kind in ETF_LISTS else "TOP"
+    screener, title = ETF_LISTS[kind]
+    quotes = yf.screen(screener, count=100).get("quotes", [])
+    if kind == "TOP":
+        quotes.sort(key=lambda q: -(q.get("netAssets") or 0))
+    rows = [row([q.get("symbol"), q.get("longName") or q.get("shortName"), q.get("regularMarketPrice"),
+                 q.get("regularMarketChangePercent"), q.get("ytdReturn"), q.get("fiftyTwoWeekChangePercent"),
+                 q.get("netAssets"), q.get("netExpenseRatio")], cmd=f"{q.get('symbol')} ETF") for q in quotes if q.get("symbol")]
+    return document("ETF market", [
+        choices("list", None, [(t, f"ETF {k}") for k, (_, t) in ETF_LISTS.items()], title),
+        table("etfs", title, [column("sym", "Symbol"), column("name", "Name"), column("price", "Price", "price"),
+                              column("chg", "1D", "pctchange"), column("ytd", "YTD", "pctchange"),
+                              column("y1", "52W", "pctchange"), column("aum", "Net assets", "compact"),
+                              column("fee", "Expense", "percent")], rows),
+    ], SOURCE, notes=["Click an ETF for holdings, sectors and costs."])
+
+
+# MARK: ECAL — economic and earnings calendar
+
+MAJOR_REGIONS = ["US", "EZ", "EU", "DE", "FR", "GB", "JP", "CN", "CA", "AU", "CH", "IT", "ES"]
+CAL_SPANS = {"TODAY": 1, "WEEK": 7, "2WEEKS": 14}
+
+
+@ttl_cache(600, maxsize=32)
+@_retry_locked
+def _calendar_frame(kind: str, start: dt.date, end: dt.date) -> pd.DataFrame:
+    cal = yf.Calendars(start=start, end=end)
+    if kind == "EARN":
+        return cal.get_earnings_calendar(limit=250)
+    return cal.get_economic_events_calendar(limit=500)
+
+
+def calendar(kind: str, span: str, region: str) -> dict[str, Any]:
+    kind = "EARN" if kind == "EARN" else "ECO"
+    span = span if span in CAL_SPANS else "WEEK"
+    today = dt.date.today()
+    start = today - dt.timedelta(days=1)   # include yesterday's releases (actuals vs expected)
+    end = today + dt.timedelta(days=CAL_SPANS[span])
+    df = _calendar_frame(kind, start, end)
+    tabs = [
+        choices("kind", None, [("Economic", f"ECAL ECO {span} {region}"), ("Earnings", f"ECAL EARN {span}")],
+                "Economic" if kind == "ECO" else "Earnings"),
+        choices("span", "When", [(label, f"ECAL {kind} {key} {region}") for key, label in
+                                 (("TODAY", "Today"), ("WEEK", "7 days"), ("2WEEKS", "14 days"))],
+                {"TODAY": "Today", "WEEK": "7 days", "2WEEKS": "14 days"}[span]),
+    ]
+    if kind == "EARN":
+        df = df.sort_values("Marketcap", ascending=False) if "Marketcap" in df else df
+        rows = [row([r.get("Event Start Date"), sym, r.get("Company"), r.get("Timing"), r.get("Marketcap"),
+                     r.get("EPS Estimate"), r.get("Reported EPS"), r.get("Surprise(%)")], cmd=f"{sym} EST")
+                for sym, r in df.iterrows()]
+        return document("Earnings calendar", [*tabs, table("earnings", f"{len(rows)} companies, largest first", [
+            column("when", "Date", "datetime"), column("sym", "Symbol"), column("co", "Company"),
+            column("time", "Timing"), column("mcap", "Mkt cap", "compact"), column("est", "EPS est.", "price"),
+            column("act", "Reported", "price"), column("surp", "Surprise", "pctchange"),
+        ], rows)], SOURCE, notes=["BMO = before market open, AMC = after market close. Click a company for estimates."])
+
+    regions = sorted({str(r) for r in df["Region"].dropna()}) if "Region" in df else []
+    region = region if region in regions or region in ("ALL", "MAJOR") else "MAJOR"
+    if region == "MAJOR":
+        df = df[df["Region"].isin(MAJOR_REGIONS)]
+    elif region != "ALL":
+        df = df[df["Region"] == region]
+    df = df.sort_values("Event Time")
+    rows = []
+    for event, r in df.iterrows():
+        actual, expected = cell(r.get("Actual")), cell(r.get("Expected"))
+        rows.append(row([r.get("Event Time"), r.get("Region"), str(event).rstrip("*"), r.get("For"), actual, expected,
+                         r.get("Last"), r.get("Revised"),
+                         actual - expected if isinstance(actual, float) and isinstance(expected, float) else None]))
+    region_choices = [("Major", f"ECAL ECO {span} MAJOR"), ("All", f"ECAL ECO {span} ALL")] + \
+        [(code, f"ECAL ECO {span} {code}") for code in MAJOR_REGIONS if code in regions]
+    return document("Economic calendar", [
+        *tabs,
+        choices("region", "Region", region_choices, {"MAJOR": "Major", "ALL": "All"}.get(region, region)),
+        table("events", f"{len(rows)} releases", [
+            column("time", "Time", "datetime"), column("region", "Region"), column("event", "Event"), column("for", "For"),
+            column("act", "Actual", "number"), column("exp", "Expected", "number"), column("last", "Previous", "number"),
+            column("rev", "Revised", "number"), column("surp", "Surprise", "change"),
+        ], rows),
+    ], "Yahoo Finance economic calendar", notes=["Times in your time zone. Surprise = actual − expected."])
