@@ -27,7 +27,7 @@ from . import securities
 from .config import settings
 from .devices import DeviceStore, PostgresDeviceStore
 from .hub import Hub
-from .providers import edgar, fred, yahoo
+from .providers import binance, edgar, fred, yahoo
 from .providers import yahoo_research as research
 from .providers import views
 from .providers.http import HTTPError
@@ -158,11 +158,15 @@ class Connection:
         p = {k: str(v) for k, v in params.items()}
 
         def symbol() -> str:
-            return securities.resolve(p.get("security", "")).symbol
+            """Yahoo symbol for Yahoo-backed screens (a crypto pair maps to e.g. BTC-USD)."""
+            return securities.resolve(p.get("security", "")).yahoo_symbol
 
         match service:
             case "refdata":
                 sec = securities.resolve(p.get("security", ""))
+                if sec.provider == "binance":
+                    quote = await asyncio.to_thread(binance.quote, sec.symbol)
+                    return {"security": _sec(sec, binance.name(sec.symbol)), "quote": quote}
                 quote, name = await asyncio.gather(
                     asyncio.to_thread(yahoo.quote, sec.symbol),
                     asyncio.to_thread(yahoo.name, sec.symbol),
@@ -170,11 +174,15 @@ class Connection:
                 return {"security": _sec(sec, name), "quote": quote}
             case "history":
                 sec = securities.resolve(p.get("security", ""))
-                series = await asyncio.to_thread(yahoo.history, sec.symbol, p.get("range", "1Y").upper(),
+                source = binance if sec.provider == "binance" else yahoo
+                series = await asyncio.to_thread(source.history, sec.symbol, p.get("range", "1Y").upper(),
                                                  (p.get("interval") or "").upper() or None)
                 return {"security": _sec(sec, None), **series}
             case "lookup":
-                return await asyncio.to_thread(yahoo.lookup, p.get("query", ""))
+                found, coins = await asyncio.gather(asyncio.to_thread(yahoo.lookup, p.get("query", "")),
+                                                    asyncio.to_thread(binance.lookup, p.get("query", ""), 3))
+                # Binance pairs first: Yahoo's crypto quotes are delayed snapshots.
+                return {**found, "results": coins + found["results"]}
             case "config":
                 # Empty values never erase a key configured on the server (.env).
                 if p.get("edgarContact", "").strip():
@@ -251,6 +259,13 @@ class Connection:
             case "calendar":
                 return await asyncio.to_thread(views.calendar, p.get("kind", "ECO").upper(), p.get("span", "WEEK").upper(),
                                                p.get("region", "MAJOR").upper())
+            case "crypto":
+                if p.get("security"):
+                    sec = securities.resolve(p["security"])
+                    if sec.provider != "binance":
+                        raise ValueError(f"{sec.typed} is not a crypto pair; try BTC CRYPTO")
+                    return await asyncio.to_thread(binance.detail, sec.symbol)
+                return await asyncio.to_thread(binance.market, p.get("quote", "USDT").upper())
             case "sentiment":
                 return await asyncio.to_thread(views.sentiment, symbol())
             case _:
@@ -265,9 +280,8 @@ class Connection:
             else:
                 await self.send({"t": kind, "cid": cid, **payload})
 
-        self.subs[cid] = (sec.symbol, sink)
         await self.send({"t": "subStatus", "cid": cid, "status": "started"})
-        self.hub.subscribe(sec.symbol, sink)
+        self.subs[cid] = (self.hub.subscribe(sec.symbol, sink, sec.provider), sink)
 
 
 def _sec(sec: securities.Security, name: str | None) -> dict[str, Any]:

@@ -9,6 +9,7 @@ dependencies = [
     "yfinance>=0.2.60",
     "pydantic>=2.8",
     "asyncpg>=0.30",
+    "websockets>=13",
 ]
 
 [project.scripts]

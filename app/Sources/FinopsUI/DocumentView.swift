@@ -87,6 +87,12 @@ struct DocumentView: View {
         } catch {
             failure = error.localizedDescription
         }
+        // Live screens reload in place; a failed refresh keeps the last good data on screen.
+        while let seconds = document?.refresh, seconds > 0, !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            if let next = try? await client.document(service, params) { document = next }
+        }
     }
 
     // Consecutive key/value blocks render side by side as cards.

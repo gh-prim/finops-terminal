@@ -189,8 +189,10 @@ public final class TerminalModel {
     public func open(_ function: FunctionID, in panel: PanelModel? = nil) {
         let panel = panel ?? activePanel
         activate(panel)
-        // From the menu or sidebar, ETF opens the ETF market; "<etf> ETF" (typed or clicked) opens a fund.
-        let args = function == panel.state.function ? panel.state.args : (function == .etf ? ["TOP"] : [])
+        // From the menu or sidebar, ETF and CRYPTO open their market screens;
+        // "<etf> ETF" / "<coin> CRYPTO" (typed or clicked) open one fund or coin.
+        let marketArgs: [FunctionID: [String]] = [.etf: ["TOP"], .crypto: ["USDT"]]
+        let args = function == panel.state.function ? panel.state.args : marketArgs[function] ?? []
         apply(.run(security: nil, function: function, args: args), to: panel)
     }
 

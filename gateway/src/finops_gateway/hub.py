@@ -1,4 +1,4 @@
-"""Subscription hub: one poller per symbol, fanned out to every subscriber."""
+"""Subscription hub: one feed per symbol (Yahoo poller or Binance stream), fanned out to every subscriber."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from .providers import yahoo
+from .providers import binance_stream, yahoo
 
 log = logging.getLogger(__name__)
 
@@ -20,10 +20,18 @@ class Hub:
         self._subscribers: dict[str, set[Sink]] = {}
         self._pollers: dict[str, asyncio.Task[None]] = {}
 
-    def subscribe(self, symbol: str, sink: Sink) -> None:
-        self._subscribers.setdefault(symbol, set()).add(sink)
-        if symbol not in self._pollers:
-            self._pollers[symbol] = asyncio.create_task(self._poll(symbol))
+    def subscribe(self, symbol: str, sink: Sink, provider: str = "yahoo") -> str:
+        """Returns the feed key to pass to `unsubscribe`."""
+        key = symbol if provider == "yahoo" else f"{provider}:{symbol}"
+        self._subscribers.setdefault(key, set()).add(sink)
+        if key not in self._pollers:
+            if provider == "binance":
+                async def emit(kind: str, payload: dict[str, Any]) -> None:
+                    await self._broadcast(key, kind, payload)
+                self._pollers[key] = asyncio.create_task(binance_stream.stream(symbol, emit))
+            else:
+                self._pollers[key] = asyncio.create_task(self._poll(symbol))
+        return key
 
     def unsubscribe(self, symbol: str, sink: Sink) -> None:
         sinks = self._subscribers.get(symbol)

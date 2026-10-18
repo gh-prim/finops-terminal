@@ -58,6 +58,8 @@ public struct GatewayDocument: Decodable, Sendable {
     public let source: String
     public let notes: [String]
     public let asOf: Double
+    /// Live screens: seconds after which the view reloads itself.
+    public let refresh: Double?
 
     public enum Block: Decodable, Sendable, Identifiable {
         case table(TableBlock)

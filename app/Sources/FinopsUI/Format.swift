@@ -5,6 +5,10 @@ import SwiftUI
 enum Format {
     static func number(_ value: Double?, digits: Int = 2) -> String {
         guard let value else { return "—" }
+        if value != 0, abs(value) < 0.01 {
+            // Small quantities (crypto sizes): keep four significant digits instead of "0.00".
+            return value.formatted(.number.precision(.significantDigits(1...4)))
+        }
         let fraction = value.rounded() == value && abs(value) >= 1 ? 0 : digits
         return value.formatted(.number.precision(.fractionLength(fraction)))
     }
@@ -52,6 +56,10 @@ enum Format {
 
     static func price(_ value: Double?) -> String {
         guard let value else { return "—" }
+        if value != 0, abs(value) < 0.01 {
+            // Sub-cent prices (PEPE, SHIB…): significant digits rather than 0.0000.
+            return value.formatted(.number.precision(.significantDigits(4)))
+        }
         let digits = abs(value) < 10 ? 4 : 2
         return value.formatted(.number.precision(.fractionLength(digits)).grouping(.automatic))
     }

@@ -90,7 +90,8 @@ def choices(id: str, title: str | None, items: list[tuple[str, str]], selected: 
 
 
 def document(title: str, blocks: list[dict[str, Any]], source: str, subtitle: str | None = None,
-             notes: list[str] | None = None) -> dict[str, Any]:
+             notes: list[str] | None = None, refresh: float | None = None) -> dict[str, Any]:
+    """`refresh`: seconds after which the app silently reloads the screen (live screens)."""
     return {
         "title": title,
         "subtitle": subtitle,
@@ -100,6 +101,7 @@ def document(title: str, blocks: list[dict[str, Any]], source: str, subtitle: st
         "source": source,
         "notes": notes or [],
         "asOf": time.time(),
+        "refresh": refresh,
     }
 
 

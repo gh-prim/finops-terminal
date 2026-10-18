@@ -303,6 +303,10 @@ MARKET = {
 }
 
 
+# Crypto rows open the live Binance chart rather than Yahoo's delayed one.
+CRYPTO_CMD = {"BTC-USD": "BTC CRYPTO", "ETH-USD": "ETH CRYPTO", "SOL-USD": "SOL CRYPTO"}
+
+
 @ttl_cache(60)
 @_retry_locked
 def market() -> dict[str, Any]:
@@ -321,7 +325,7 @@ def market() -> dict[str, Any]:
                 continue
             last, prev, first = float(closes.iloc[-1]), float(closes.iloc[-2]), float(closes.iloc[0])
             rows.append(row([name, symbol, last, last - prev, (last / prev - 1) * 100, (last / first - 1) * 100,
-                             closes.index[-1]], cmd=f"{symbol} CHART"))
+                             closes.index[-1]], cmd=f"{CRYPTO_CMD.get(symbol, symbol)} CHART"))
         blocks.append(table(group.lower().replace(" ", "-"), group, [
             column("name", "Name"), column("symbol", "Symbol"), column("last", "Last", "price"),
             column("chg", "Change", "change"), column("pct", "Chg %", "pctchange"),
