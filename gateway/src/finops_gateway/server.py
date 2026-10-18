@@ -28,7 +28,7 @@ from .securities import split_pair
 from .config import settings
 from .devices import DeviceStore, PostgresDeviceStore
 from .hub import Hub
-from .providers import binance, crypto_news, edgar, fred, yahoo
+from .providers import article, binance, crypto_news, edgar, fred, yahoo
 from .providers import yahoo_research as research
 from .providers import views
 from .providers.http import HTTPError
@@ -264,6 +264,9 @@ class Connection:
             case "calendar":
                 return await asyncio.to_thread(views.calendar, p.get("kind", "ECO").upper(), p.get("span", "WEEK").upper(),
                                                p.get("region", "MAJOR").upper())
+            case "article":
+                # Not p[...]: URLs are case-sensitive and must reach the provider untouched.
+                return await asyncio.to_thread(article.read, str(params.get("url", "")).strip())
             case "crypto":
                 if p.get("security"):
                     sec = securities.resolve(p["security"])

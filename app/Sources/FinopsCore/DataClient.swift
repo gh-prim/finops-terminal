@@ -83,6 +83,11 @@ public actor DataClient {
         try await request(service, params, as: GatewayDocument.self)
     }
 
+    /// Readable text of a web article, extracted by the gateway.
+    public func article(_ url: String) async throws -> Article {
+        try await request("article", ["url": url], as: Article.self)
+    }
+
     public func econSeries(_ id: String, range: String, yoy: Bool) async throws -> EconSeries {
         try await request("econ_series", ["id": id, "range": range, "units": yoy ? "pc1" : "lin"], as: EconSeries.self)
     }

@@ -317,6 +317,7 @@ struct TableBlockView: View {
 
     private func activate(_ row: GatewayDocument.Row) {
         if let cmd = row.cmd { run(cmd) }
+        else if let url = row.url, url.hasPrefix("http") { run("READ \(url)") }  // headlines open in the terminal
         else if let url = row.url.flatMap(URL.init(string:)) { openURL(url) }
     }
 

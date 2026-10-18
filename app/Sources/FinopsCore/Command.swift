@@ -38,6 +38,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
     case charts = "CHARTS"
     case corr = "CORR"
     case quant = "QUANT"
+    case read = "READ"
     case help = "HELP"
 
     public enum Group: String, CaseIterable, Sendable {
@@ -50,7 +51,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         switch self {
         case .quote, .chart, .desc, .news, .fin, .est, .evt, .hold, .file, .opt, .rv, .rels, .dcf, .sent: .security
         case .mkt, .movers, .scrn, .econ, .curve, .heat, .fxm, .wbi, .cbr, .ecal, .etf, .crypto, .tv: .market
-        case .port, .alert, .perf, .charts, .corr, .quant, .help: .tools
+        case .port, .alert, .perf, .charts, .corr, .quant, .read, .help: .tools
         }
     }
 
@@ -89,6 +90,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .charts: ["CHARTS"]
         case .corr: ["CORR"]
         case .quant: ["QUANT", "CALC"]
+        case .read: ["READ", "WEB"]
         case .help: ["HELP", "?"]
         }
     }
@@ -128,6 +130,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .charts: "Chart grid"
         case .corr: "Correlation"
         case .quant: "Quant calculators"
+        case .read: "Reader"
         case .help: "Help"
         }
     }
@@ -167,6 +170,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .charts: "Small-multiple charts of the watchlist. Args: 5D 1M 3M 1Y"
         case .corr: "Correlation matrix of the watchlist. Args: 3M 6M 1Y 2Y 5Y"
         case .quant: "CFA-style calculators: time value, bonds, Black–Scholes options"
+        case .read: "Read an article or web page in the terminal: READ <link>. News headlines open here"
         case .help: "All functions and keys"
         }
     }
@@ -208,6 +212,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .charts: "square.grid.2x2"
         case .corr: "circle.hexagongrid"
         case .quant: "x.squareroot"
+        case .read: "doc.richtext"
         case .help: "questionmark.circle"
         }
     }
@@ -257,7 +262,8 @@ public enum CommandParser {
                     argsStart = index + 2
                 }
             }
-            let args = function == .tv ? Array(original[argsStart...]) : Array(tokens[argsStart...])
+            // Video IDs and links are case-sensitive.
+            let args = [.tv, .read].contains(function) ? Array(original[argsStart...]) : Array(tokens[argsStart...])
             return .run(security: security.isEmpty ? nil : security, function: function, args: args)
         }
         return .run(security: tokens.joined(separator: " "), function: nil, args: [])

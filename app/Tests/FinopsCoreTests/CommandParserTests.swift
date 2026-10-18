@@ -50,6 +50,8 @@ struct CommandParserExtendedTests {
 struct TVCommandTests {
     @Test func tvKeepsVideoIdCase() {
         #expect(CommandParser.parse("tv QB5BNdBFujE") == .run(security: nil, function: .tv, args: ["QB5BNdBFujE"]))
+        #expect(CommandParser.parse("read https://decrypt.co/381246/Bitcoin-ETFs")
+                == .run(security: nil, function: .read, args: ["https://decrypt.co/381246/Bitcoin-ETFs"]))
         #expect(CommandParser.parse("ETF top") == .run(security: nil, function: .etf, args: ["TOP"]))
         #expect(CommandParser.parse("crypto eur") == .run(security: nil, function: .crypto, args: ["EUR"]))
         #expect(CommandParser.parse("btc crypto") == .run(security: "BTC CRYPTO", function: .crypto, args: []))

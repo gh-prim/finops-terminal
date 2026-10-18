@@ -211,6 +211,8 @@ struct PanelView: View {
             QuantView()
         case .tv:
             TVView(args: args, run: run)
+        case .read:
+            ReaderView(client: client, link: args.joined(separator: " "), run: run)
         case .etf where args.isEmpty && !security.isEmpty:
             DocumentView(client: client, service: "etf", params: ["security": security], run: run)
         case .etf:

@@ -78,3 +78,16 @@ public enum ChartRange: String, CaseIterable, Sendable {
     case d1 = "1D", d5 = "5D", m1 = "1M", m3 = "3M", m6 = "6M", ytd = "YTD"
     case y1 = "1Y", y2 = "2Y", y5 = "5Y", y10 = "10Y", max = "MAX"
 }
+
+/// An article extracted for the READ screen.
+public struct Article: Codable, Sendable, Hashable {
+    public let url: String
+    public let finalUrl: String
+    public let title: String?
+    public let author: String?
+    public let site: String?
+    public let date: String?
+    public let paragraphs: [String]
+    /// False for teasers, paywalls and pages that aren't articles: show the web page instead.
+    public let readable: Bool
+}
