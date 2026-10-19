@@ -83,6 +83,7 @@ public final class TerminalModel {
     public private(set) var alerts: [PriceAlert]
     public let quotes = QuoteBoard()
     public let dashboards = DashboardStore()
+    public let rules = RuleBook()
 
     /// Set by the app to deliver system notifications for triggered alerts.
     @ObservationIgnored public var notify: ((String, String) -> Void)?
@@ -130,6 +131,8 @@ public final class TerminalModel {
         connection = .ready
         quotes.setClient(client)
         trackQuotes()
+        rules.notify = { [weak self] title, body in self?.notify?(title, body) }
+        rules.start(client)
     }
 
     /// A status line in the toolbar (e.g. "Backend unreachable, using local data").
@@ -318,6 +321,24 @@ public final class TerminalModel {
                 positions.removeAll { $0.security == security }
                 positionStore.save(positions)
                 trackQuotes()
+            }
+            state.args = []
+        case .rule where !state.args.isEmpty:
+            switch state.args[0].uppercased() {
+            case "ADD":
+                let id = state.args.dropFirst().joined(separator: " ").lowercased()
+                guard let preset = rules.presets?.presets.first(where: { $0.id == id }) else {
+                    message = "Unknown preset \(id). Presets: " + (rules.presets?.presets.map(\.id).joined(separator: ", ") ?? "loading…")
+                    return false
+                }
+                rules.add(preset)
+                message = "Rule added: \(preset.name)"
+            case "CHECK":
+                Task { await rules.check() }
+                message = "Checking rules…"
+            default:
+                message = "Use: RULE ADD <preset id> or RULE CHECK"
+                return false
             }
             state.args = []
         case .dash where !state.args.isEmpty:

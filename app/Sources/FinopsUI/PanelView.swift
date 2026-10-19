@@ -223,6 +223,8 @@ struct PanelView: View {
         case .study:
             DocumentView(client: client, service: "study", params: ["security": security.isEmpty ? "SPX IDX" : security,
                                                                      "args": args.joined(separator: " ")], run: run)
+        case .rule:
+            RulesView(book: model.rules)
         case .dash:
             DashboardBuilderView(model: model, client: model.client)
         case .read:

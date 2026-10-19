@@ -33,6 +33,7 @@ from .providers import yahoo_research as research
 from .providers import views
 from .providers.http import HTTPError
 from .intel import markers as intel_markers
+from .intel import rules as intel_rules
 from .intel import study as intel_study
 from .intel import why as intel_why
 from .intel import screens as intel
@@ -280,6 +281,11 @@ class Connection:
             case "study":
                 return await asyncio.to_thread(intel_study.study, p.get("security") or "SPX IDX",
                                                [a for a in p.get("args", "").upper().split() if a])
+            case "rules":
+                # The rules JSON is case-sensitive (ids, keywords): read it from the raw params.
+                return await asyncio.to_thread(intel_rules.evaluate, str(params.get("rules", "[]")))
+            case "rule_presets":
+                return intel_rules.presets()
             case "world":
                 return await asyncio.to_thread(intel.world_screen, p.get("kind", "ALL").upper(), int(p.get("severity") or 1))
             case "link":

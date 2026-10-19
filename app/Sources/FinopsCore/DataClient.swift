@@ -88,6 +88,16 @@ public actor DataClient {
         try await request("markers", ["security": security, "range": range.rawValue], as: ChartMarkers.self).markers
     }
 
+    /// Evaluate cross-source rules against live data.
+    public func evaluate(_ rules: [WatchRule]) async throws -> RuleEvaluation {
+        let json = String(decoding: try JSONEncoder().encode(rules), as: UTF8.self)
+        return try await request("rules", ["rules": json], as: RuleEvaluation.self)
+    }
+
+    public func rulePresets() async throws -> RulePresets {
+        try await request("rule_presets", [:], as: RulePresets.self)
+    }
+
     /// Readable text of a web article, extracted by the gateway.
     public func article(_ url: String) async throws -> Article {
         try await request("article", ["url": url], as: Article.self)

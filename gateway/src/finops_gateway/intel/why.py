@@ -27,7 +27,7 @@ from . import markers as mk
 from . import world
 
 log = logging.getLogger(__name__)
-MODEL = "claude-opus-5-5"
+MODEL = "claude-sonnet-5-5"  # user choice: Sonnet 5.5 is plenty for a short synthesis
 CONTEXT = ["SPX IDX", "NDX IDX", "VIX IDX", "DXY IDX", "CL1 CMD", "GC1 CMD", "TNX IDX", "BTC CRYPTO"]
 
 SYSTEM = """You are the market analyst inside a trading terminal. A trader asks why a security moved.
@@ -132,7 +132,7 @@ def why(typed: str) -> dict[str, Any]:
              [{"label": time.strftime("%d %b", time.gmtime(t)), "value": zi} for t, r, zi in unusual[-12:]]),
     ]
     return document(f"Why did {sec.typed} move?", blocks,
-                    "Prices: Yahoo/Binance · news: Yahoo, crypto RSS · events: GDELT, GDACS, USGS, PortWatch · synthesis: Claude",
+                    "Prices: Yahoo/Binance · news: Yahoo, crypto RSS · events: GDELT, GDACS, USGS, PortWatch · synthesis: Claude Sonnet 5.5",
                     subtitle=name, notes=["Evidence is gathered automatically; the synthesis only uses what is listed here."])
 
 
