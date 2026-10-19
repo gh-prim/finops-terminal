@@ -125,17 +125,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// If the backend connection drops, fall back to local data and retry the backend every minute.
+    /// If the backend connection drops: retry it quickly first (a deploy restarts it in ~10 s), then
+    /// fall back to local data and keep retrying the backend every 10 s until it is back.
     private func watchBackend(_ host: RemoteHost, model: TerminalModel) {
         watchdog?.cancel()
         watchdog = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(5))
+                try? await Task.sleep(for: .seconds(3))
                 guard let self, case .failed(let reason) = self.backendLink.phase else { continue }
-                model.show(message: "Backend lost (\(reason)) — switched to local data")
+                model.show(message: "Backend connection dropped (\(reason)) — reconnecting…")
+                for _ in 0..<6 where !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(2))
+                    if await self.useBackend(host, model: model) {
+                        model.show(message: "Backend reconnected")
+                        return
+                    }
+                }
+                model.show(message: "Backend lost (\(reason)) — switched to local data, retrying every 10 s")
                 await self.useLocal(model, fromWatchdog: true)
                 while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(60))
+                    try? await Task.sleep(for: .seconds(10))
                     if await self.useBackend(host, model: model) {
                         model.show(message: "Backend back — using backend data")
                         return
