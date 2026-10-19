@@ -6,3 +6,5 @@ __pycache__/
 .swiftpm/
 ipad/build/
 ipad/*.xcodeproj/
+tv/build/
+tv/*.xcodeproj/

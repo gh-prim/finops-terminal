@@ -1,4 +1,5 @@
 import FinopsCore
+import FinopsDash
 import SwiftUI
 
 /// Search box + live watchlist. Everything here is reachable by mouse.

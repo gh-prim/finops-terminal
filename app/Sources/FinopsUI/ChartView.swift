@@ -1,5 +1,6 @@
 import Charts
 import FinopsCore
+import FinopsDash
 import SwiftUI
 
 /// Price chart with candles, volume, overlays, studies and comparison. Every

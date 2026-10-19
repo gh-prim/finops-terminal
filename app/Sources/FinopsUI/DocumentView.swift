@@ -4,6 +4,7 @@ import AppKit
 import UIKit
 #endif
 import FinopsCore
+import FinopsDash
 import SwiftUI
 import UniformTypeIdentifiers
 

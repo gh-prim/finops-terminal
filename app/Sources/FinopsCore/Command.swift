@@ -39,6 +39,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
     case corr = "CORR"
     case quant = "QUANT"
     case read = "READ"
+    case dash = "DASH"
     case help = "HELP"
 
     public enum Group: String, CaseIterable, Sendable {
@@ -51,7 +52,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         switch self {
         case .quote, .chart, .desc, .news, .fin, .est, .evt, .hold, .file, .opt, .rv, .rels, .dcf, .sent: .security
         case .mkt, .movers, .scrn, .econ, .curve, .heat, .fxm, .wbi, .cbr, .ecal, .etf, .crypto, .tv: .market
-        case .port, .alert, .perf, .charts, .corr, .quant, .read, .help: .tools
+        case .port, .alert, .perf, .charts, .corr, .quant, .read, .dash, .help: .tools
         }
     }
 
@@ -91,6 +92,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .corr: ["CORR"]
         case .quant: ["QUANT", "CALC"]
         case .read: ["READ", "WEB"]
+        case .dash: ["DASH", "DASHBOARD"]
         case .help: ["HELP", "?"]
         }
     }
@@ -131,6 +133,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .corr: "Correlation"
         case .quant: "Quant calculators"
         case .read: "Reader"
+        case .dash: "TV dashboards"
         case .help: "Help"
         }
     }
@@ -170,6 +173,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .charts: "Small-multiple charts of the watchlist. Args: 5D 1M 3M 1Y"
         case .corr: "Correlation matrix of the watchlist. Args: 3M 6M 1Y 2Y 5Y"
         case .quant: "CFA-style calculators: time value, bonds, Black–Scholes options"
+        case .dash: "Build Apple TV dashboards. DASH NEW <name>, DASH <name>, DASH TV, <security> DASH ADD CHART|QUOTES|NEWS"
         case .read: "Read an article or web page in the terminal: READ <link>. News headlines open here"
         case .help: "All functions and keys"
         }
@@ -213,6 +217,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .corr: "circle.hexagongrid"
         case .quant: "x.squareroot"
         case .read: "doc.richtext"
+        case .dash: "appletv"
         case .help: "questionmark.circle"
         }
     }
@@ -263,7 +268,7 @@ public enum CommandParser {
                 }
             }
             // Video IDs and links are case-sensitive.
-            let args = [.tv, .read].contains(function) ? Array(original[argsStart...]) : Array(tokens[argsStart...])
+            let args = [.tv, .read, .dash].contains(function) ? Array(original[argsStart...]) : Array(tokens[argsStart...])
             return .run(security: security.isEmpty ? nil : security, function: function, args: args)
         }
         return .run(security: tokens.joined(separator: " "), function: nil, args: [])

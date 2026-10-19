@@ -1,4 +1,5 @@
 import FinopsCore
+import FinopsDash
 import SwiftUI
 
 /// One workspace panel: its own header (back, security, function tabs, link) and screen.
@@ -211,6 +212,8 @@ struct PanelView: View {
             QuantView()
         case .tv:
             TVView(args: args, run: run)
+        case .dash:
+            DashboardBuilderView(model: model, client: model.client)
         case .read:
             ReaderView(client: client, link: args.joined(separator: " "), run: run)
         case .etf where args.isEmpty && !security.isEmpty:

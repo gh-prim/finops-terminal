@@ -1,3 +1,4 @@
+import FinopsCore
 import Foundation
 
 /// Bonjour service advertised by the Mac app for paired iPads.
@@ -61,6 +62,8 @@ public enum RemoteMessage: Sendable, Equatable {
     case authOK(macName: String)
     case authFailed(reason: String)
     case state(RemoteState)
+    /// Every dashboard built on the Mac; `display` asks a TV to switch to one now.
+    case dashboards([Dashboard], display: UUID?)
 
     private struct Wire: Codable {
         var t: String
@@ -73,6 +76,8 @@ public enum RemoteMessage: Sendable, Equatable {
         var cmd: String?
         var action: RemoteAction?
         var state: RemoteState?
+        var dashboards: [Dashboard]?
+        var display: UUID?
     }
 
     public static func isRemote(_ data: Data) -> Bool {
@@ -93,6 +98,7 @@ public enum RemoteMessage: Sendable, Equatable {
         case .authOK(let mac): w.t = "remote.authOK"; w.macName = mac
         case .authFailed(let reason): w.t = "remote.authFailed"; w.reason = reason
         case .state(let state): w.t = "remote.state"; w.state = state
+        case .dashboards(let list, let display): w.t = "remote.dashboards"; w.dashboards = list; w.display = display
         }
         return (try? JSONEncoder().encode(w)) ?? Data()
     }
@@ -120,6 +126,8 @@ public enum RemoteMessage: Sendable, Equatable {
         case "remote.state":
             guard let state = w.state else { return nil }
             self = .state(state)
+        case "remote.dashboards":
+            self = .dashboards(w.dashboards ?? [], display: w.display)
         default: return nil
         }
     }

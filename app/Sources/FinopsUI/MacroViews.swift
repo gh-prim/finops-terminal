@@ -1,5 +1,6 @@
 import Charts
 import FinopsCore
+import FinopsDash
 import SwiftUI
 
 /// ECON <series> [range] [YOY]: one FRED series as a chart.

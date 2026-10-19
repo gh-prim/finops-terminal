@@ -1,4 +1,5 @@
 import FinopsCore
+import FinopsDash
 import SwiftUI
 
 /// QUANT: CFA-style calculators computed on the device (no data needed).

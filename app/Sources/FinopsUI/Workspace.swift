@@ -1,4 +1,5 @@
 import FinopsCore
+@_exported import FinopsDash
 import Foundation
 import Observation
 
@@ -81,6 +82,7 @@ public final class TerminalModel {
     public private(set) var positions: [Position]
     public private(set) var alerts: [PriceAlert]
     public let quotes = QuoteBoard()
+    public let dashboards = DashboardStore()
 
     /// Set by the app to deliver system notifications for triggered alerts.
     @ObservationIgnored public var notify: ((String, String) -> Void)?
@@ -318,8 +320,54 @@ public final class TerminalModel {
                 trackQuotes()
             }
             state.args = []
+        case .dash where !state.args.isEmpty:
+            if !handleDashArgs(state) { return false }
+            state.args = []
         default:
             break
+        }
+        return true
+    }
+
+    /// DASH NEW <name> · DASH TV [name] · DASH <name> · <security> DASH ADD <kind>
+    private func handleDashArgs(_ state: PanelState) -> Bool {
+        let args = state.args
+        let verb = args[0].uppercased()
+        let rest = args.dropFirst().joined(separator: " ")
+        switch verb {
+        case "NEW":
+            let dashboard = dashboards.create(named: rest.isEmpty ? "Dashboard" : rest)
+            message = "Created dashboard \(dashboard.name)"
+        case "TV", "SHOW":
+            guard let target = rest.isEmpty ? dashboards.current : dashboards.dashboard(named: rest) else {
+                message = "No dashboard named \(rest)"
+                return false
+            }
+            dashboards.currentID = target.id
+            dashboards.showOnTV(target.id)
+            message = dashboards.displays.isEmpty ? "No Apple TV connected" : "Showing \(target.name) on TV"
+        case "ADD":
+            let kinds: [String: DashWidget.Kind] = ["CHART": .chart, "QUOTES": .quotes, "QUOTE": .quotes, "NEWS": .news,
+                                                     "COMPARE": .compare, "DIAGRAM": .diagram, "SCREEN": .screen,
+                                                     "TV": .video, "VIDEO": .video, "CLOCK": .clock, "TEXT": .text,
+                                                     "TICKER": .ticker, "TAPE": .ticker, "SLIDESHOW": .carousel,
+                                                     "CAROUSEL": .carousel]
+            guard let id = dashboards.currentID, let kind = kinds[args.dropFirst().first?.uppercased() ?? "CHART"] else {
+                message = "Use: <security> DASH ADD CHART|QUOTES|TICKER|NEWS|COMPARE|DIAGRAM|SCREEN|SLIDESHOW|TV|CLOCK|TEXT"
+                return false
+            }
+            let securities = state.security.map { [$0] } ?? []
+            dashboards.addWidget(kind, to: id, securities: securities)
+            if kind == .news, let security = state.security, let widget = dashboards.current?.widgets.last {
+                dashboards.updateWidget(widget.id, in: id) { $0.command = "\(security) NEWS" }
+            }
+            message = "Added \(kind.title) to \(dashboards.current?.name ?? "dashboard")"
+        default:
+            guard let target = dashboards.dashboard(named: args.joined(separator: " ")) else {
+                message = "No dashboard named \(args.joined(separator: " ")). DASH NEW <name> creates one."
+                return false
+            }
+            dashboards.currentID = target.id
         }
         return true
     }

@@ -103,6 +103,9 @@ public final class RemoteLink {
     public private(set) var phase: Phase = .idle
     public private(set) var state: RemoteState?
     public private(set) var client: DataClient?
+    public private(set) var dashboards: [Dashboard] = []
+    /// Set when the Mac asks to show a dashboard now (a new value each time).
+    public private(set) var displayRequest: (id: UUID, at: Date)?
     @ObservationIgnored private var listenTask: Task<Void, Never>?
 
     public let deviceID: String
@@ -164,6 +167,9 @@ public final class RemoteLink {
                     verdict.continuation.yield(.failed(reason))
                 case .state(let state):
                     self?.state = state
+                case .dashboards(let list, let display):
+                    self?.dashboards = list
+                    if let display { self?.displayRequest = (display, .now) }
                 default:
                     break
                 }

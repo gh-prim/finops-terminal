@@ -179,18 +179,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 message: model.message
             )
         }
+        // Apple TV dashboards: sent on connect, re-sent on every edit.
+        remote.dashboardsProvider = { model.dashboards.dashboards }
+        model.dashboards.onChange = { [weak self] in self?.remote.broadcastDashboards() }
+        model.dashboards.onDisplay = { [weak self] id in self?.remote.broadcastDashboards(display: id) }
         guard !remoteStarted else { return }
         remoteStarted = true
+        self.model = model
         remote.start(hostName: Self.bonjourHostName)
         observeState()
     }
 
     private var remoteStarted = false
+    private weak var model: TerminalModel?
 
     /// Re-broadcast the workspace state to iPads whenever anything it reads changes.
     private func observeState() {
         withObservationTracking {
             _ = remote.stateProvider?()
+            model?.dashboards.displays = remote.connected
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.remote.broadcastState()
@@ -224,7 +231,7 @@ struct MacToolbarAccessory: View {
                 }
             }
             .buttonStyle(.borderless)
-            .help(server.connected.isEmpty ? "Pair an iPad" : "iPad connected: \(server.connected.joined(separator: ", "))")
+            .help(server.connected.isEmpty ? "Pair an iPad or Apple TV" : "Connected: \(server.connected.joined(separator: ", "))")
             .accessibilityLabel(server.connected.isEmpty ? "Pair iPad" : "iPad connected")
             .sheet(isPresented: $showPairing) { PairingView(server: server) }
 
@@ -243,8 +250,8 @@ struct PairingView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Pair an iPad").font(.title2.bold())
-            Text("Open finops on the iPad (same Wi-Fi), pick this Mac, and enter the code.")
+            Text("Pair an iPad or Apple TV").font(.title2.bold())
+            Text("Open finops on the iPad or Apple TV (same network), pick this Mac, and enter the code.")
                 .foregroundStyle(.secondary)
 
             if let code = server.pairingCode, code.isValid() {
@@ -268,7 +275,7 @@ struct PairingView: View {
             LabeledContent("Connected", value: server.connected.isEmpty ? "—" : server.connected.joined(separator: ", "))
 
             if !server.devices.isEmpty {
-                Text("Paired iPads").font(.headline)
+                Text("Paired devices").font(.headline)
                 ForEach(server.devices) { device in
                     HStack {
                         Text(device.name)

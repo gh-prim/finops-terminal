@@ -1,3 +1,4 @@
+import FinopsCore
 import Foundation
 import Network
 import Observation
@@ -21,6 +22,7 @@ public final class RemoteServer {
     @ObservationIgnored public var onCommand: ((String) -> Void)?
     @ObservationIgnored public var onAction: ((RemoteAction) -> Void)?
     @ObservationIgnored public var stateProvider: (() -> RemoteState)?
+    @ObservationIgnored public var dashboardsProvider: (() -> [Dashboard])?
 
     @ObservationIgnored private var listener: NWListener?
     @ObservationIgnored private var peers: [ObjectIdentifier: Peer] = [:]
@@ -126,6 +128,13 @@ public final class RemoteServer {
         for peer in peers.values where peer.authenticated { peer.send(data) }
     }
 
+    /// Push the dashboards to every connected device; `display` makes TVs switch to that one.
+    public func broadcastDashboards(display: UUID? = nil) {
+        guard let dashboards = dashboardsProvider?() else { return }
+        let data = RemoteMessage.dashboards(dashboards, display: display).encoded()
+        for peer in peers.values where peer.authenticated { peer.send(data) }
+    }
+
     // MARK: Connections
 
     private func accept(_ connection: NWConnection) {
@@ -209,8 +218,8 @@ public final class RemoteServer {
         case .action(let action):
             guard peer.authenticated else { return }
             onAction?(action)
-        case .paired, .authOK, .authFailed, .state:
-            break  // Mac → iPad only
+        case .paired, .authOK, .authFailed, .state, .dashboards:
+            break  // Mac → device only
         }
     }
 
@@ -220,6 +229,9 @@ public final class RemoteServer {
         peer.authenticated = true
         if let gatewayURL { peer.openUpstream(gatewayURL, hello: gatewayHello) }
         refreshConnected()
+        if let dashboards = dashboardsProvider?() {
+            peer.send(RemoteMessage.dashboards(dashboards, display: nil).encoded())
+        }
     }
 }
 

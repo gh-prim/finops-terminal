@@ -3,19 +3,19 @@ import FinopsCore
 import SwiftUI
 
 /// Colour scales shared by the visual blocks.
-enum Heat {
-    static let up = Color(red: 0.149, green: 0.651, blue: 0.604)
-    static let down = Color(red: 0.937, green: 0.325, blue: 0.314)
-    static let neutral = Color(red: 0.20, green: 0.20, blue: 0.22)
+public enum Heat {
+    public static let up = Color(red: 0.149, green: 0.651, blue: 0.604)
+    public static let down = Color(red: 0.937, green: 0.325, blue: 0.314)
+    public static let neutral = Color(red: 0.20, green: 0.20, blue: 0.22)
 
     /// Red ← neutral → green, saturating at ±`range`.
-    static func diverging(_ value: Double?, range: Double) -> Color {
+    public static func diverging(_ value: Double?, range: Double) -> Color {
         guard let value, range > 0 else { return neutral }
         let t = min(abs(value) / range, 1)
         return mix(neutral, value >= 0 ? up : down, t)
     }
 
-    static func mix(_ a: Color, _ b: Color, _ t: Double) -> Color {
+    public static func mix(_ a: Color, _ b: Color, _ t: Double) -> Color {
         let ra = a.resolve(in: EnvironmentValues()), rb = b.resolve(in: EnvironmentValues())
         return Color(red: Double(ra.red + (rb.red - ra.red) * Float(t)),
                      green: Double(ra.green + (rb.green - ra.green) * Float(t)),
@@ -23,13 +23,13 @@ enum Heat {
     }
 
     /// A robust colour range: 90th percentile of |values|.
-    static func range(_ values: [Double]) -> Double {
+    public static func range(_ values: [Double]) -> Double {
         let mags = values.map(abs).sorted()
         guard !mags.isEmpty else { return 1 }
         return max(mags[min(mags.count - 1, Int(Double(mags.count) * 0.9))], 0.0001)
     }
 
-    static let palette: [Color] = [
+    public static let palette: [Color] = [
         Palette.accent, Color(red: 0.35, green: 0.65, blue: 1.0), Color(red: 0.80, green: 0.45, blue: 1.0),
         Color(red: 0.30, green: 0.85, blue: 0.85), Color(red: 1.0, green: 0.45, blue: 0.6), up,
         Color(red: 0.95, green: 0.85, blue: 0.35), Color(red: 0.6, green: 0.6, blue: 0.65),
@@ -42,12 +42,20 @@ private func blockTitle(_ title: String?) -> some View {
 
 // MARK: Treemap (squarified)
 
-struct TreemapBlockView: View {
+public struct TreemapBlockView: View {
     let block: GatewayDocument.TreemapBlock
     let run: (String) -> Void
+    /// Terminal screens give treemaps room; dashboard tiles pass 0 to fill whatever they have.
+    var minHeight: CGFloat = 420
+    public init(block: GatewayDocument.TreemapBlock, run: @escaping (String) -> Void, minHeight: CGFloat = 420) {
+        self.block = block
+        self.run = run
+        self.minHeight = minHeight
+    }
+
     @State private var hovered: String?
 
-    var body: some View {
+    public var body: some View {
         let range = Heat.range(block.groups.flatMap { $0.items.compactMap(\.value) })
         VStack(alignment: .leading, spacing: 6) {
             blockTitle(block.title)
@@ -74,7 +82,7 @@ struct TreemapBlockView: View {
                     }
                 }
             }
-            .frame(minHeight: 420)
+            .frame(minHeight: minHeight)
             legend(range)
         }
     }
@@ -98,7 +106,9 @@ struct TreemapBlockView: View {
         .frame(width: max(rect.width, 0), height: max(rect.height, 0))
         .offset(x: rect.minX, y: rect.minY)
         .contentShape(Rectangle())
+        #if !os(tvOS)
         .onHover { hovered = $0 ? item.label : (hovered == item.label ? nil : hovered) }
+        #endif
         .onTapGesture { if let cmd = item.cmd { run(cmd) } }
         .help("\(item.label) · \(item.detail ?? "") · \(Format.percent(item.value))")
         .accessibilityElement()
@@ -120,8 +130,8 @@ struct TreemapBlockView: View {
 }
 
 /// Squarified treemap layout (Bruls, Huizing, van Wijk 2000). Returns one rect per weight, in input order.
-enum Squarify {
-    static func layout(_ weights: [Double], in rect: CGRect) -> [CGRect] {
+public enum Squarify {
+    public static func layout(_ weights: [Double], in rect: CGRect) -> [CGRect] {
         var out = [CGRect](repeating: .zero, count: weights.count)
         let total = weights.reduce(0, +)
         guard total > 0, rect.width > 0, rect.height > 0 else { return out }
@@ -168,11 +178,16 @@ enum Squarify {
 
 // MARK: Heat matrix
 
-struct MatrixBlockView: View {
+public struct MatrixBlockView: View {
     let block: GatewayDocument.MatrixBlock
     let run: (String) -> Void
+    public init(block: GatewayDocument.MatrixBlock, run: @escaping (String) -> Void) {
+        self.block = block
+        self.run = run
+    }
 
-    var body: some View {
+
+    public var body: some View {
         let values = block.values.flatMap { $0.compactMap { $0 } }
         let range = block.scale == "correlation" ? 1.0 : Heat.range(values.map { $0 - block.center })
         VStack(alignment: .leading, spacing: 6) {
@@ -214,12 +229,17 @@ struct MatrixBlockView: View {
 
 // MARK: Scatter
 
-struct ScatterBlockView: View {
+public struct ScatterBlockView: View {
     let block: GatewayDocument.ScatterBlock
     let run: (String) -> Void
+    public init(block: GatewayDocument.ScatterBlock, run: @escaping (String) -> Void) {
+        self.block = block
+        self.run = run
+    }
+
     @State private var hovered: GatewayDocument.ScatterBlock.Point?
 
-    var body: some View {
+    public var body: some View {
         let maxSize = block.points.compactMap(\.size).max() ?? 1
         VStack(alignment: .leading, spacing: 6) {
             blockTitle(block.title)
@@ -236,6 +256,9 @@ struct ScatterBlockView: View {
             .chartYAxisLabel(block.yLabel)
             .chartXAxis { AxisMarks { _ in AxisGridLine().foregroundStyle(Palette.border); AxisValueLabel() } }
             .chartYAxis { AxisMarks(position: .leading) { _ in AxisGridLine().foregroundStyle(Palette.border); AxisValueLabel() } }
+            #if os(tvOS)
+            .frame(height: 380)
+            #else
             .chartOverlay { proxy in
                 GeometryReader { geo in
                     Rectangle().fill(.clear).contentShape(Rectangle())
@@ -248,6 +271,7 @@ struct ScatterBlockView: View {
                 }
             }
             .frame(height: 380)
+            #endif
             if let hovered {
                 Text("\(hovered.label)  \(block.xLabel) \(Format.value(.number(hovered.x), kind: block.xKind))  ·  \(block.yLabel) \(Format.value(.number(hovered.y), kind: block.yKind))")
                     .font(.terminalSmall).foregroundStyle(Palette.accent)
@@ -271,13 +295,18 @@ struct ScatterBlockView: View {
 
 // MARK: Relationship graph (hub and spoke)
 
-struct GraphBlockView: View {
+public struct GraphBlockView: View {
     let block: GatewayDocument.GraphBlock
     let run: (String) -> Void
+    public init(block: GatewayDocument.GraphBlock, run: @escaping (String) -> Void) {
+        self.block = block
+        self.run = run
+    }
+
 
     private let nodeSize = CGSize(width: 190, height: 34)
 
-    var body: some View {
+    public var body: some View {
         let left = block.groups.first { $0.side == "left" }
         let right = block.groups.first { $0.side == "right" }
         let bottom = block.groups.first { $0.side == "bottom" }
@@ -373,11 +402,16 @@ struct GraphBlockView: View {
 
 // MARK: Bars, series, donut, small multiples
 
-struct BarsBlockView: View {
+public struct BarsBlockView: View {
     let block: GatewayDocument.BarsBlock
     let run: (String) -> Void
+    public init(block: GatewayDocument.BarsBlock, run: @escaping (String) -> Void) {
+        self.block = block
+        self.run = run
+    }
 
-    var body: some View {
+
+    public var body: some View {
         let maxAbs = max(block.items.map { abs($0.value) }.max() ?? 1, 0.0001)
         let hasNegative = block.items.contains { $0.value < 0 }
         VStack(alignment: .leading, spacing: 4) {
@@ -405,10 +439,14 @@ struct BarsBlockView: View {
     }
 }
 
-struct SeriesBlockView: View {
+public struct SeriesBlockView: View {
     let block: GatewayDocument.SeriesBlock
+    public init(block: GatewayDocument.SeriesBlock) {
+        self.block = block
+    }
 
-    var body: some View {
+
+    public var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             blockTitle(block.title)
             HStack(spacing: 12) {
@@ -441,10 +479,14 @@ struct SeriesBlockView: View {
     }
 }
 
-struct DonutBlockView: View {
+public struct DonutBlockView: View {
     let block: GatewayDocument.DonutBlock
+    public init(block: GatewayDocument.DonutBlock) {
+        self.block = block
+    }
 
-    var body: some View {
+
+    public var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             blockTitle(block.title)
             HStack(alignment: .center, spacing: 24) {
@@ -468,11 +510,16 @@ struct DonutBlockView: View {
     }
 }
 
-struct SparkGridBlockView: View {
+public struct SparkGridBlockView: View {
     let block: GatewayDocument.SparkGridBlock
     let run: (String) -> Void
+    public init(block: GatewayDocument.SparkGridBlock, run: @escaping (String) -> Void) {
+        self.block = block
+        self.run = run
+    }
 
-    var body: some View {
+
+    public var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             blockTitle(block.title)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 8)], spacing: 8) {

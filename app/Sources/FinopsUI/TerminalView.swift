@@ -1,4 +1,5 @@
 import FinopsCore
+import FinopsDash
 import SwiftUI
 
 public struct TerminalView: View {
