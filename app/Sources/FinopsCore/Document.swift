@@ -44,6 +44,8 @@ public enum JSONValue: Codable, Sendable, Hashable {
 /// How a value should be displayed. Unknown kinds fall back to `.text`.
 public enum ValueKind: String, Codable, Sendable {
     case text, int, number, price, compact, percent, pctchange, change, date, datetime
+    /// A signed −1…+1 score (sentiment): two decimals, green/red.
+    case score
 
     public init(from decoder: Decoder) throws {
         self = ValueKind(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .text

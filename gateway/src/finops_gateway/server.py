@@ -41,6 +41,7 @@ from .intel import exposure as intel_exposure
 from .intel import rules as intel_rules
 from .intel import study as intel_study
 from .intel import why as intel_why
+from .intel import news_sentiment
 from .intel import screens as intel
 
 log = logging.getLogger(__name__)
@@ -218,12 +219,18 @@ class Connection:
             case "profile":
                 return await asyncio.to_thread(research.profile, symbol())
             case "news":
+                # Every headline list gets Claude's tone column (when an Anthropic key is set).
                 if p.get("security") and (sec := securities.resolve(p["security"])).provider == "binance":
-                    return await asyncio.to_thread(crypto_news.news, split_pair(sec.symbol)[0])
+                    base = split_pair(sec.symbol)[0]
+                    doc = await asyncio.to_thread(crypto_news.news, base)
+                    return await asyncio.to_thread(news_sentiment.annotate, doc, f"{base} (crypto)")
                 if p.get("query", "").strip().upper() in ("CRYPTO", "CRYPTOS"):
-                    return await asyncio.to_thread(crypto_news.news)
+                    doc = await asyncio.to_thread(crypto_news.news)
+                    return await asyncio.to_thread(news_sentiment.annotate, doc, "the crypto market")
                 query = symbol() if p.get("security") else (p.get("query") or "stock market")
-                return await asyncio.to_thread(research.news, query)
+                doc = await asyncio.to_thread(research.news, query)
+                subject = query if p.get("security") else f"markets ({query})"  # same key as SENT: one Claude read serves both
+                return await asyncio.to_thread(news_sentiment.annotate, doc, subject)
             case "estimates":
                 return await asyncio.to_thread(research.estimates, symbol())
             case "events":

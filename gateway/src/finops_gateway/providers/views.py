@@ -515,11 +515,18 @@ def central_banks() -> dict[str, Any]:
 
 
 def sentiment(symbol: str) -> dict[str, Any]:
+    """Headline sentiment: Claude's read when an Anthropic key is set, else the word lexicon."""
+    from ..intel import news_sentiment  # local: keeps provider imports light
+
     doc = news(symbol)
     rows = doc["blocks"][0]["rows"] if doc["blocks"] else []
-    scored = [(r, qa.headline_sentiment(r["cells"][1] or "")) for r in rows]
-    if not scored:
+    if not rows:
         raise LookupError(f"no headlines for {symbol}")
+    read = news_sentiment.score(symbol, tuple(r["cells"][1] or "" for r in rows)) if news_sentiment.available() else None
+    if read and "error" not in read:
+        return _claude_sentiment(symbol, rows, read)
+    notes = [read["error"]] if read else ["Add an Anthropic API key in Settings to have Claude read the headlines."]
+    scored = [(r, qa.headline_sentiment(r["cells"][1] or "")) for r in rows]
     pos = sum(s > 0 for _, s in scored)
     neg = sum(s < 0 for _, s in scored)
     avg = sum(s for _, s in scored) / len(scored)
@@ -528,12 +535,46 @@ def sentiment(symbol: str) -> dict[str, Any]:
                        ("Positive", pos / len(scored) * 100, "percent"), ("Negative", neg / len(scored) * 100, "percent")]),
         bars("scores", "Score per headline", [{"label": (r["cells"][1] or "")[:60], "value": s, "cmd": None}
                                               for r, s in scored], kind="number"),
-        table("headlines", None, [column("time", "Time", "datetime"), column("score", "Score", "change"),
+        table("headlines", None, [column("time", "Time", "datetime"), column("score", "Score", "score"),
                                   column("title", "Headline"), column("source", "Source")],
               [{**row([r["cells"][0], s, r["cells"][1], r["cells"][2]]), "url": r.get("url")} for r, s in scored]),
-    ], "Yahoo Finance headlines · finance word lexicon (Loughran–McDonald style)", subtitle=symbol, notes=[
-        "Lexicon scoring of headlines only. Reddit needs API credentials, X a paid API, and Polymarket is blocked in France, "
-        "so they aren't included.",
+    ], "Yahoo Finance headlines · finance word lexicon (Loughran–McDonald style)", subtitle=symbol, notes=notes)
+
+
+def _claude_sentiment(symbol: str, rows: list[dict[str, Any]], read: dict[str, Any]) -> dict[str, Any]:
+    scored = [(r, read["items"].get(r["cells"][1] or "")) for r in rows]
+    scored = [(r, s) for r, s in scored if s]
+    n = len(scored) or 1
+    tones = [s["tone"] for _, s in scored]
+    high = [(r, s) for r, s in scored if s["impact"] == "high"]
+    overall = read.get("overall") or {}
+    weighted = sum(s["score"] * {"high": 3, "medium": 2, "low": 1}[s["impact"]] for _, s in scored)
+    weights = sum({"high": 3, "medium": 2, "low": 1}[s["impact"]] for _, s in scored) or 1
+    best = max(scored, key=lambda x: x[1]["score"], default=None)
+    worst = min(scored, key=lambda x: x[1]["score"], default=None)
+
+    def extreme(title: str, pick: Any) -> dict[str, Any]:
+        r, s = pick
+        return kv(title, [("Headline", (r["cells"][1] or "")[:70], "text"), ("Score", s["score"], "score"),
+                          ("Impact", s["impact"], "text"), ("Why", s["why"], "text")])
+
+    return document(f"Headline sentiment — {symbol}", [
+        kv("Claude's read", [("Overall (−1…+1)", overall.get("score"), "score"),
+                             ("Impact-weighted", weighted / weights, "score"),
+                             ("High-impact headlines", len(high), "int")]),
+        kv("Tone mix", [("Bullish", tones.count("bullish") / n * 100, "percent"),
+                        ("Neutral", tones.count("neutral") / n * 100, "percent"),
+                        ("Bearish", tones.count("bearish") / n * 100, "percent")]),
+        *([extreme("Most bullish", best)] if best and best[1]["score"] > 0 else []),
+        *([extreme("Most bearish", worst)] if worst and worst[1]["score"] < 0 else []),
+        text("Summary (Claude)", overall.get("summary") or "—"),
+        table("headlines", None, [column("time", "Time", "datetime"), column("score", "Score", "score"),
+                                  column("impact", "Impact"), column("title", "Headline"), column("why", "Why (Claude)"),
+                                  column("source", "Source")],
+              [{**row([r["cells"][0], s["score"], s["impact"], r["cells"][1], s["why"], r["cells"][2]]), "url": r.get("url")}
+               for r, s in scored]),
+    ], "Yahoo Finance headlines · read by Claude Sonnet 5.5 (from the headline only)", subtitle=symbol, notes=[
+        "Scores judge each headline's likely effect on the price, from the headline alone. Not investment advice.",
     ])
 
 

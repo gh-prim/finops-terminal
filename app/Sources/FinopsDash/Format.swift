@@ -37,6 +37,7 @@ public enum Format {
         case .compact: return compact(n)
         case .percent: return n.formatted(.number.precision(.fractionLength(2))) + "%"
         case .pctchange: return percent(n)
+        case .score: return signed(n, digits: 2)
         case .change: return signed(n, digits: abs(n) < 10 ? 4 : 2)
         case .date: return date(n)
         case .datetime: return dateTime(n)
@@ -45,7 +46,7 @@ public enum Format {
 
     public static func color(_ value: JSONValue, kind: ValueKind) -> Color {
         switch kind {
-        case .pctchange, .change: Palette.direction(value.number)
+        case .pctchange, .change, .score: Palette.direction(value.number)
         default: Palette.text
         }
     }
