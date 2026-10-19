@@ -21,7 +21,7 @@ struct DocumentView: View {
 
     var body: some View {
         SwiftUI.Group {
-            if let document, failure == nil, document.layout == "map" {
+            if let document, failure == nil, document.layout == "map" || document.layout == "split" {
                 mapLayout(document)
             } else {
                 scrolling
@@ -33,15 +33,21 @@ struct DocumentView: View {
     /// Map screens (WORLD, case feeds): the whole world map on the left two thirds, full height;
     /// tabs, figures and tables in a scrolling column on the right third.
     private func mapLayout(_ document: GatewayDocument) -> some View {
+        // The primary visual: the map, else the treemap (CRYPTO's split layout).
         let map = document.blocks.first { if case .map = $0 { true } else { false } }
+            ?? document.blocks.first { if case .treemap = $0 { true } else { false } }
         let rest = document.blocks.filter { $0.id != map?.id }
         return GeometryReader { geo in
             HStack(alignment: .top, spacing: 0) {
-                if case .map(let m) = map {
-                    MapBlockView(block: m, run: run, height: nil, wholeWorld: true)
-                        .padding(10)
-                        .frame(width: geo.size.width * 2 / 3, height: geo.size.height)
+                SwiftUI.Group {
+                    switch map {
+                    case .map(let m): MapBlockView(block: m, run: run, height: nil, wholeWorld: true)
+                    case .treemap(let t): TreemapBlockView(block: t, run: run, minHeight: 0).frame(maxHeight: .infinity)
+                    default: EmptyView()
+                    }
                 }
+                .padding(10)
+                .frame(width: geo.size.width * 2 / 3, height: geo.size.height)
                 Divider().overlay(Palette.border)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
@@ -180,6 +186,7 @@ struct DocumentView: View {
         switch block {
         case .table(let t): t.rows.count <= 30 && t.columns.count <= 9
         case .bars, .donut, .series: true
+        case .matrix(let m): m.cols.count <= 10
         default: false
         }
     }

@@ -62,7 +62,12 @@ def create_app(token: str | None = None, hub: Hub | None = None, devices: Device
         asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=48, thread_name_prefix="provider"))
         if database_url and app.state.devices is None:
             app.state.devices = await PostgresDeviceStore.connect(database_url)
+        # The shared backend keeps heavy screens warm so nobody waits on a cold heatmap.
+        # (Not the Mac's local fallback: same home IP, it would double the Yahoo traffic.)
+        warm = asyncio.create_task(_keep_warm()) if database_url else None
         yield
+        if warm:
+            warm.cancel()
 
     app = FastAPI(title="finops-gateway", lifespan=lifespan)
     app.state.devices = devices
@@ -329,6 +334,26 @@ class Connection:
 
         await self.send({"t": "subStatus", "cid": cid, "status": "started"})
         self.subs[cid] = (self.hub.subscribe(sec.symbol, sink, sec.provider), sink)
+
+
+WARM = [
+    ("heatmap", lambda: views.heatmap(None, "1D")),
+    ("market", lambda: research.market()),
+    ("fxmatrix", lambda: views.fx_matrix()),
+    ("world", lambda: intel.world_screen("ALL")),
+    ("crypto", lambda: binance.market("USDT")),
+]
+
+
+async def _keep_warm(every: float = 240) -> None:
+    await asyncio.sleep(5)
+    while True:
+        for name, build in WARM:
+            try:
+                await asyncio.to_thread(build)
+            except Exception as exc:
+                log.info("warm-up of %s failed: %s", name, exc)
+        await asyncio.sleep(every)
 
 
 def _sec(sec: securities.Security, name: str | None) -> dict[str, Any]:

@@ -151,30 +151,54 @@ def history(symbol: str, range_code: str, interval_code: str | None = None) -> d
             "bars": _bars(df)}
 
 
-@ttl_cache(10, maxsize=512)
-@_retry_locked
-def quote(symbol: str) -> dict[str, Any]:
-    fi = yf.Ticker(symbol).fast_info
-    last = _num(fi.get("lastPrice"))
+QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
+
+
+def _from_batch(q: dict[str, Any]) -> dict[str, Any] | None:
+    last = _num(q.get("regularMarketPrice"))
     if last is None:
-        raise LookupError(f"no quote for {symbol}")
-    prev = _num(fi.get("previousClose"))
+        return None
+    prev = _num(q.get("regularMarketPreviousClose"))
     change = last - prev if prev is not None else None
     return {
-        "symbol": symbol,
+        "symbol": q.get("symbol"),
         "last": last,
         "previousClose": prev,
         "change": change,
         "changePct": (change / prev * 100) if change is not None and prev else None,
-        "open": _num(fi.get("open")),
-        "dayHigh": _num(fi.get("dayHigh")),
-        "dayLow": _num(fi.get("dayLow")),
-        "volume": _num(fi.get("lastVolume")),
-        "currency": fi.get("currency"),
-        "exchange": fi.get("exchange"),
-        "marketCap": _num(fi.get("marketCap")),
-        "asOf": time.time(),
+        "open": _num(q.get("regularMarketOpen")),
+        "dayHigh": _num(q.get("regularMarketDayHigh")),
+        "dayLow": _num(q.get("regularMarketDayLow")),
+        "volume": _num(q.get("regularMarketVolume")),
+        "currency": q.get("currency"),
+        "exchange": q.get("fullExchangeName") or q.get("exchange"),
+        "marketCap": _num(q.get("marketCap")),
+        "asOf": float(q.get("regularMarketTime") or time.time()),
     }
+
+
+@_retry_locked
+def quotes(symbols: list[str]) -> dict[str, dict[str, Any]]:
+    """Many quotes in one Yahoo request per 50 symbols (the per-IP rate limit is per request)."""
+    from yfinance.data import YfData
+
+    out: dict[str, dict[str, Any]] = {}
+    unique = list(dict.fromkeys(symbols))
+    for i in range(0, len(unique), 50):
+        chunk = unique[i:i + 50]
+        data = YfData().get_raw_json(QUOTE_URL, params={"symbols": ",".join(chunk)})
+        for q in (data.get("quoteResponse") or {}).get("result") or []:
+            if (parsed := _from_batch(q)) is not None:
+                out[q["symbol"]] = parsed
+    return out
+
+
+@ttl_cache(10, maxsize=512)
+def quote(symbol: str) -> dict[str, Any]:
+    q = quotes([symbol]).get(symbol)
+    if q is None:
+        raise LookupError(f"no quote for {symbol}")
+    return q
 
 
 def name(symbol: str) -> str | None:

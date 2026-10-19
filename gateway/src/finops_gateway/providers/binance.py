@@ -220,7 +220,7 @@ def market(quote_asset: str = "USDT", count: int = 100) -> dict[str, Any]:
             column("vol", f"Volume {quote_asset}", "compact"), column("n", "Trades", "compact"),
         ], rows),
     ], SOURCE, notes=["Live: refreshes every 10 s. Click a coin for its order book, a tile for its chart, a headline to read it."],
-        refresh=10)
+        refresh=10, layout="split")
 
 
 def detail(pair: str) -> dict[str, Any]:

@@ -182,6 +182,13 @@ public enum Squarify {
 public struct MatrixBlockView: View {
     let block: GatewayDocument.MatrixBlock
     let run: (String) -> Void
+    @Environment(\.viewportHeight) private var viewport
+
+    /// Taller cells on a big window (up to 46 pt) so a matrix isn't a thin strip at the top.
+    private var cellHeight: CGFloat {
+        guard viewport > 0, !block.rows.isEmpty else { return 24 }
+        return min(max(24, (viewport - 230) / CGFloat(block.rows.count + 1)), 46)
+    }
     public init(block: GatewayDocument.MatrixBlock, run: @escaping (String) -> Void) {
         self.block = block
         self.run = run
@@ -193,13 +200,20 @@ public struct MatrixBlockView: View {
         let range = block.scale == "correlation" ? 1.0 : Heat.range(values.map { $0 - block.center })
         VStack(alignment: .leading, spacing: 6) {
             blockTitle(block.title)
-            ScrollView(.horizontal) {
+            ViewThatFits(in: .horizontal) {
+                grid(range)
+                ScrollView(.horizontal) { grid(range) }
+            }
+        }
+    }
+
+    private func grid(_ range: Double) -> some View {
                 Grid(horizontalSpacing: 1, verticalSpacing: 1) {
                     GridRow {
                         Text("")
                         ForEach(block.cols, id: \.self) { col in
                             Text(col).font(.terminalLabel).foregroundStyle(Palette.muted)
-                                .frame(minWidth: 70)
+                                .frame(minWidth: 70, maxWidth: .infinity)
                         }
                     }
                     ForEach(Array(block.rows.enumerated()), id: \.offset) { r, label in
@@ -216,15 +230,13 @@ public struct MatrixBlockView: View {
                                     .font(.system(size: 12, design: .monospaced))
                                     .monospacedDigit()
                                     .foregroundStyle(block.scale == "none" ? Palette.text : .white)
-                                    .frame(minWidth: 70, minHeight: 24)
+                                    .frame(minWidth: 70, maxWidth: .infinity, minHeight: cellHeight)
                                     .background(block.scale == "none" ? Palette.surface
                                                 : Heat.diverging(value.map { $0 - block.center }, range: range))
                             }
                         }
                     }
                 }
-            }
-        }
     }
 }
 
@@ -307,18 +319,21 @@ public struct GraphBlockView: View {
 
 
     private let nodeSize = CGSize(width: 190, height: 34)
+    @Environment(\.viewportHeight) private var viewport
 
     public var body: some View {
         let left = block.groups.first { $0.side == "left" }
         let right = block.groups.first { $0.side == "right" }
         let bottom = block.groups.first { $0.side == "bottom" }
         let rows = max(left?.nodes.count ?? 0, right?.nodes.count ?? 0, 6)
-        let height = CGFloat(rows) * (nodeSize.height + 6) + 40 + (bottom == nil ? 0 : nodeSize.height + 70)
+        let bottomBand = bottom == nil ? 0 : nodeSize.height + 70
+        // At least the nodes' natural height; on a big window, spread them over most of it.
+        let height = max(CGFloat(rows) * (nodeSize.height + 6) + 40 + bottomBand, viewport * 0.6)
         VStack(alignment: .leading, spacing: 6) {
             blockTitle(block.title)
             GeometryReader { geo in
                 let w = geo.size.width
-                let sideHeight = CGFloat(rows) * (nodeSize.height + 6) + 20
+                let sideHeight = height - 20 - bottomBand
                 let center = CGPoint(x: w / 2, y: sideHeight / 2 + 10)
                 let leftPts = column(left?.nodes.count ?? 0, x: nodeSize.width / 2 + 4, height: sideHeight)
                 let rightPts = column(right?.nodes.count ?? 0, x: w - nodeSize.width / 2 - 4, height: sideHeight)
@@ -527,6 +542,14 @@ public struct DonutBlockView: View {
 public struct SparkGridBlockView: View {
     let block: GatewayDocument.SparkGridBlock
     let run: (String) -> Void
+    @Environment(\.viewportHeight) private var viewport
+
+    /// Spread the small charts over the window: rows of ~6 tiles share the height.
+    private var sparkHeight: CGFloat {
+        guard viewport > 0 else { return 90 }
+        let rows = CGFloat((block.items.count + 5) / 6)
+        return min(max(90, (viewport - 180) / max(rows, 1) - 70), 260)
+    }
     public init(block: GatewayDocument.SparkGridBlock, run: @escaping (String) -> Void) {
         self.block = block
         self.run = run
@@ -555,7 +578,7 @@ public struct SparkGridBlockView: View {
                         .chartXAxis(.hidden)
                         .chartYAxis(.hidden)
                         .chartYScale(domain: (item.points.min() ?? 0)...(item.points.max() ?? 1))
-                        .frame(height: 90)
+                        .frame(height: sparkHeight)
                     }
                     .padding(8)
                     .background(Palette.surface, in: RoundedRectangle(cornerRadius: 4))

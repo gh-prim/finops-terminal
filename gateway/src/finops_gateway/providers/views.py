@@ -102,6 +102,7 @@ def _sector(key: str) -> tuple[str, float, pd.DataFrame]:
     return s.name, float((s.overview or {}).get("market_weight") or 0), s.top_companies
 
 
+@ttl_cache(300, maxsize=32)
 def heatmap(sector: str | None, period: str) -> dict[str, Any]:
     period = period if period in PERIODS else "1D"
     keys = [SECTORS[sector]] if sector in SECTORS else list(SECTORS.values())
