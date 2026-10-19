@@ -161,12 +161,14 @@ public struct DashWidget: Codable, Sendable, Hashable, Identifiable {
     public var seconds: Int
     /// For `ticker`: scroll speed, 1 (slow) to 3 (fast).
     public var speed: Int
+    /// For `chart`: show only the last N hours (e.g. 4 h of 15-minute candles); nil = the whole range.
+    public var hours: Int?
 
     public init(id: UUID = UUID(), kind: Kind, title: String? = nil, x: Int = 0, y: Int = 0, w: Int? = nil, h: Int? = nil,
                 securities: [String] = [], range: String = "1D", interval: String? = nil, style: Style? = nil,
                 metric: Metric = .change, overlays: [String] = [], command: String? = nil, channel: String? = nil,
                 muted: Bool = true, text: String? = nil, part: String? = nil, slides: [DashWidget] = [],
-                seconds: Int = 15, speed: Int = 2) {
+                seconds: Int = 15, speed: Int = 2, hours: Int? = nil) {
         self.id = id
         self.kind = kind
         self.title = title
@@ -188,6 +190,7 @@ public struct DashWidget: Codable, Sendable, Hashable, Identifiable {
         self.slides = slides
         self.seconds = seconds
         self.speed = speed
+        self.hours = hours
     }
 
     /// A ready-to-show widget of `kind` with sensible content.
@@ -200,7 +203,7 @@ public struct DashWidget: Codable, Sendable, Hashable, Identifiable {
             DashWidget(kind: .chart, securities: ["ETH CRYPTO"], range: "1D", interval: "5MIN"),
             DashWidget(kind: .screen, title: "Market heatmap", command: "HEAT 1D"),
         ])
-        case .chart: DashWidget(kind: .chart, securities: ["BTC CRYPTO"], range: "1D", interval: "5MIN")
+        case .chart: DashWidget(kind: .chart, securities: ["BTC CRYPTO"], range: "1D", interval: "15MIN", style: .candle, hours: 4)
         case .compare: DashWidget(kind: .compare, securities: ["SPX IDX", "NDX IDX", "BTC CRYPTO"], range: "1M")
         case .diagram: DashWidget(kind: .diagram, title: "Megacaps, 1 month",
                                   securities: ["AAPL US EQ", "MSFT US EQ", "NVDA US EQ", "AMZN US EQ", "GOOGL US EQ", "META US EQ"],
@@ -225,7 +228,7 @@ public struct DashWidget: Codable, Sendable, Hashable, Identifiable {
     // Tolerant decoding: missing fields fall back to defaults, so older files keep loading.
     private enum CodingKeys: String, CodingKey {
         case id, kind, title, x, y, w, h, securities, range, interval, style, metric, overlays, command, channel, muted, text, part
-        case slides, seconds, speed
+        case slides, seconds, speed, hours
     }
 
     public init(from decoder: Decoder) throws {
@@ -249,7 +252,8 @@ public struct DashWidget: Codable, Sendable, Hashable, Identifiable {
             part: try c.decodeIfPresent(String.self, forKey: .part),
             slides: try c.decodeIfPresent([DashWidget].self, forKey: .slides) ?? [],
             seconds: try c.decodeIfPresent(Int.self, forKey: .seconds) ?? 15,
-            speed: try c.decodeIfPresent(Int.self, forKey: .speed) ?? 2)
+            speed: try c.decodeIfPresent(Int.self, forKey: .speed) ?? 2,
+            hours: try c.decodeIfPresent(Int.self, forKey: .hours))
     }
 }
 
@@ -261,7 +265,8 @@ public extension Dashboard {
             DashWidget(kind: .video, x: 0, y: 1, w: 6, h: 4, channel: "us"),
             DashWidget(kind: .quotes, x: 6, y: 1, w: 6, h: 2,
                        securities: ["SPX IDX", "NDX IDX", "CAC IDX", "EURUSD FX", "BTC CRYPTO", "ETH CRYPTO"]),
-            DashWidget(kind: .chart, x: 6, y: 3, w: 6, h: 2, securities: ["BTC CRYPTO"], range: "1D", interval: "5MIN"),
+            DashWidget(kind: .chart, x: 6, y: 3, w: 6, h: 2, securities: ["BTC CRYPTO"], range: "1D", interval: "15MIN",
+                       style: .candle, hours: 4),
             DashWidget(kind: .screen, title: "Crypto market", x: 0, y: 5, w: 4, h: 3, command: "CRYPTO"),
             DashWidget(kind: .compare, x: 4, y: 5, w: 4, h: 3, securities: ["SPX IDX", "NDX IDX", "CAC IDX"], range: "1M"),
             DashWidget(kind: .news, x: 8, y: 5, w: 4, h: 3, command: "NEWS CRYPTO"),

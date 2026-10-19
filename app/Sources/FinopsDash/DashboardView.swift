@@ -137,7 +137,8 @@ public struct WidgetView: View {
         switch widget.kind {
         case .chart, .quotes, .compare, .diagram:
             let list = widget.securities.prefix(3).joined(separator: ", ")
-            return list.isEmpty ? widget.kind.title : "\(list) · \(widget.range)"
+            let span = widget.kind == .chart ? widget.hours.map { "\($0)H" } ?? widget.range : widget.range
+            return list.isEmpty ? widget.kind.title : "\(list) · \(span)"
         case .screen, .news: return widget.command ?? widget.kind.title
         default: return widget.kind.title
         }

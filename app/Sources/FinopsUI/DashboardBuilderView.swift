@@ -344,6 +344,13 @@ private struct WidgetInspector: View {
                 }
                 .pickerStyle(.segmented).labelsHidden()
             }
+            field("Show last") {
+                Picker("", selection: Binding(get: { widget.hours ?? 0 }, set: { v in update { $0.hours = v == 0 ? nil : v } })) {
+                    Text("Whole range").tag(0)
+                    ForEach([1, 2, 4, 8, 12, 24], id: \.self) { Text("\($0) h").tag($0) }
+                }
+                .labelsHidden()
+            }
             field("Overlays") {
                 HStack {
                     ForEach(["SMA20", "SMA50", "SMA200", "EMA20"], id: \.self) { name in

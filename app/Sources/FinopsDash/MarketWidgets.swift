@@ -86,21 +86,39 @@ struct ChartWidget: View {
         .task(id: "\(security)|\(widget.range)|\(widget.interval ?? "")") { await run() }
     }
 
+    /// The bars on screen: the whole range, or only the last `hours`.
+    private var shown: [Bar] {
+        guard let hours = widget.hours, let last = bars.last else { return bars }
+        let cutoff = last.t + (step ?? 0) - Double(hours) * 3600
+        return bars.filter { $0.t >= cutoff }
+    }
+
     private var header: some View {
-        let first = bars.first?.c, last = bars.last?.c
+        let bars = shown
+        let first = bars.first?.o ?? bars.first?.c, last = bars.last?.c
         let change = first.flatMap { f in last.map { ($0 / f - 1) * 100 } }
         return HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(last.map(Format.price) ?? "—").font(.system(size: 18, weight: .semibold, design: .monospaced))
                 .foregroundStyle(Palette.text)
             Text(Format.percent(change)).font(.terminalSmall).foregroundStyle(Palette.direction(change))
             Spacer()
+            Text(widget.interval.map(Self.intervalLabel) ?? "")
+                .font(.terminalSmall).foregroundStyle(Palette.muted)
             if !widget.overlays.isEmpty {
                 Text(widget.overlays.joined(separator: " ")).font(.terminalSmall).foregroundStyle(Palette.muted)
             }
         }
     }
 
+    private static func intervalLabel(_ raw: String) -> String {
+        ["1MIN": "1m", "5MIN": "5m", "15MIN": "15m", "30MIN": "30m", "1H": "1h", "4H": "4h", "1DAY": "1D", "1WK": "1W"][raw] ?? raw
+    }
+
     private var chart: some View {
+        let all = bars
+        let bars = shown
+        // Overlays are computed on the full history so a 4-hour window still gets a real SMA50.
+        let skip = all.count - bars.count
         let closes = bars.map(\.c)
         let lows = bars.compactMap(\.l) + closes, highs = bars.compactMap(\.h) + closes
         let lo = lows.min() ?? 0, hi = highs.max() ?? 1
@@ -129,7 +147,7 @@ struct ChartWidget: View {
                         .foregroundStyle(color).lineStyle(StrokeStyle(lineWidth: 1.5))
                 }
             }
-            ForEach(overlayLines(closes), id: \.name) { line in
+            ForEach(overlayLines(all.map(\.c), skip: skip), id: \.name) { line in
                 ForEach(Array(line.values.enumerated()), id: \.offset) { i, value in
                     if let value {
                         LineMark(x: .value("i", Double(i)), y: .value(line.name, value), series: .value("s", line.name))
@@ -144,7 +162,16 @@ struct ChartWidget: View {
         }
         .chartYScale(domain: (lo - pad)...(hi + pad))
         .chartXScale(domain: -0.5...(Double(bars.count) - 0.5))
-        .chartXAxis(.hidden)
+        .chartXAxis {
+            AxisMarks(values: Self.ticks(count: bars.count)) { value in
+                AxisGridLine().foregroundStyle(Palette.border.opacity(0.5))
+                AxisValueLabel {
+                    if let i = value.as(Double.self), let bar = bars[safe: Int(i)] {
+                        Text(Self.timeLabel(bar.date, step: step ?? 86400)).font(.terminalSmall)
+                    }
+                }
+            }
+        }
         .chartYAxis {
             AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine().foregroundStyle(Palette.border)
@@ -153,10 +180,21 @@ struct ChartWidget: View {
         }
     }
 
+    /// About four evenly spaced time labels.
+    private static func ticks(count: Int) -> [Double] {
+        guard count > 1 else { return [] }
+        let stride = max(count / 4, 1)
+        return Swift.stride(from: stride / 2, to: count, by: stride).map(Double.init)
+    }
+
+    private static func timeLabel(_ date: Date, step: Double) -> String {
+        step < 86400 ? date.formatted(date: .omitted, time: .shortened) : date.formatted(.dateTime.month(.abbreviated).day())
+    }
+
     private struct OverlayLine { let name: String; let color: Color; let values: [Double?] }
 
-    private func overlayLines(_ closes: [Double]) -> [OverlayLine] {
-        widget.overlays.compactMap { name in
+    private func overlayLines(_ closes: [Double], skip: Int) -> [OverlayLine] {
+        widget.overlays.compactMap { name -> OverlayLine? in
             switch name {
             case "SMA20": OverlayLine(name: name, color: Color(red: 0.35, green: 0.65, blue: 1.0), values: Indicators.sma(closes, period: 20))
             case "SMA50": OverlayLine(name: name, color: Palette.accent, values: Indicators.sma(closes, period: 50))
@@ -165,10 +203,12 @@ struct ChartWidget: View {
             default: nil
             }
         }
+        .map { OverlayLine(name: $0.name, color: $0.color, values: Array($0.values.dropFirst(skip))) }
     }
 
     private func run() async {
-        let range = ChartRange(rawValue: widget.range) ?? .d1
+        // With a time window, load a few days so the window is full even after a quiet session.
+        let range = widget.hours != nil ? .d5 : (ChartRange(rawValue: widget.range) ?? .d1)
         let interval = widget.interval.flatMap(ChartConfig.Interval.init(rawValue:))
         // Reload the history every 5 minutes; the stream keeps the last candle live in between.
         while !Task.isCancelled {
