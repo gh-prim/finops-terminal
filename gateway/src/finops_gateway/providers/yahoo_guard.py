@@ -14,7 +14,7 @@ import time
 from yfinance import data as yf_data
 from yfinance.exceptions import YFRateLimitError
 
-RATE = 3.0                 # requests per second
+RATE = 6.0                 # requests per second (heatmaps fetch ~120 prices at once)
 MIN_COOLDOWN, MAX_COOLDOWN = 60.0, 900.0
 
 

@@ -150,3 +150,16 @@ public struct SectionLabel: View {
             .tracking(1)
     }
 }
+
+/// Height of the screen area a view is shown in, so its main visual can fill it instead of
+/// sitting at a fixed size above a black margin (0 = unknown, e.g. on the TV).
+private struct ViewportHeightKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+public extension EnvironmentValues {
+    var viewportHeight: CGFloat {
+        get { self[ViewportHeightKey.self] }
+        set { self[ViewportHeightKey.self] = newValue }
+    }
+}

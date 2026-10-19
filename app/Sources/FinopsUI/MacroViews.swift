@@ -121,15 +121,19 @@ struct CurveView: View {
                                           Color(red: 0.80, green: 0.45, blue: 1.0), Palette.muted]
 
     var body: some View {
-        ScrollView {
+        // Chart fills the height on the left, the table sits beside it: no scrolling, no black margin.
+        GeometryReader { geo in
             VStack(alignment: .leading, spacing: 12) {
                 Text("US Treasury yield curve").font(.system(size: 14, weight: .semibold, design: .monospaced))
                 if let failure {
                     StatusMessage(title: "Couldn't load the curve", detail: failure, isError: true)
                 } else if let data, let latest = data.curves.first {
                     legend(data)
-                    chart(data).frame(height: 300)
-                    table(data, latest: latest)
+                    HStack(alignment: .top, spacing: 18) {
+                        chart(data).frame(maxWidth: .infinity, maxHeight: .infinity)
+                        ScrollView { table(data, latest: latest) }.frame(width: min(420, geo.size.width * 0.34))
+                    }
+                    .frame(maxHeight: .infinity)
                     Text("Constant-maturity yields, %. Source: \(data.source)").font(.terminalSmall).foregroundStyle(Palette.muted)
                 } else {
                     ProgressView().controlSize(.small)

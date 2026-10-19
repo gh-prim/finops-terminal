@@ -86,6 +86,12 @@ struct DocumentView: View {
     }
 
     private var scrolling: some View {
+        GeometryReader { geo in
+            scrollingContent.environment(\.viewportHeight, geo.size.height)
+        }
+    }
+
+    private var scrollingContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if let failure {
@@ -282,6 +288,7 @@ struct TableBlockView: View {
     @State private var sortColumn: Int?
     @State private var ascending = false
     @State private var available: CGFloat = 0
+    @Environment(\.viewportHeight) private var viewport
 
     private static let charWidth: CGFloat = 7.4
     static let rowHeight: CGFloat = 22
@@ -334,7 +341,8 @@ struct TableBlockView: View {
                             }
                         }
                     }
-                    .frame(height: min(CGFloat(rows.count) * Self.rowHeight, Self.maxBodyHeight))
+                    .frame(height: min(CGFloat(rows.count) * Self.rowHeight,
+                                       viewport > 0 ? max(Self.maxBodyHeight, viewport - 170) : Self.maxBodyHeight))
                 }
             }
         }

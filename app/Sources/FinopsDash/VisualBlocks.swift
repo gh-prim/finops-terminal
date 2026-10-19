@@ -47,6 +47,7 @@ public struct TreemapBlockView: View {
     let run: (String) -> Void
     /// Terminal screens give treemaps room; dashboard tiles pass 0 to fill whatever they have.
     var minHeight: CGFloat = 420
+    @Environment(\.viewportHeight) private var viewport
     public init(block: GatewayDocument.TreemapBlock, run: @escaping (String) -> Void, minHeight: CGFloat = 420) {
         self.block = block
         self.run = run
@@ -82,7 +83,7 @@ public struct TreemapBlockView: View {
                     }
                 }
             }
-            .frame(minHeight: minHeight)
+            .frame(minHeight: minHeight > 0 ? max(minHeight, viewport * 0.72) : 0)
             legend(range)
         }
     }
@@ -238,6 +239,7 @@ public struct ScatterBlockView: View {
     }
 
     @State private var hovered: GatewayDocument.ScatterBlock.Point?
+    @Environment(\.viewportHeight) private var viewport
 
     public var body: some View {
         let maxSize = block.points.compactMap(\.size).max() ?? 1
@@ -257,7 +259,7 @@ public struct ScatterBlockView: View {
             .chartXAxis { AxisMarks { _ in AxisGridLine().foregroundStyle(Palette.border); AxisValueLabel() } }
             .chartYAxis { AxisMarks(position: .leading) { _ in AxisGridLine().foregroundStyle(Palette.border); AxisValueLabel() } }
             #if os(tvOS)
-            .frame(height: 380)
+            .frame(height: max(380, viewport * 0.62))
             #else
             .chartOverlay { proxy in
                 GeometryReader { geo in
@@ -270,7 +272,7 @@ public struct ScatterBlockView: View {
                         }
                 }
             }
-            .frame(height: 380)
+            .frame(height: max(380, viewport * 0.62))
             #endif
             if let hovered {
                 Text("\(hovered.label)  \(block.xLabel) \(Format.value(.number(hovered.x), kind: block.xKind))  ·  \(block.yLabel) \(Format.value(.number(hovered.y), kind: block.yKind))")
@@ -441,6 +443,7 @@ public struct BarsBlockView: View {
 
 public struct SeriesBlockView: View {
     let block: GatewayDocument.SeriesBlock
+    @Environment(\.viewportHeight) private var viewport
     public init(block: GatewayDocument.SeriesBlock) {
         self.block = block
     }
@@ -485,7 +488,7 @@ public struct SeriesBlockView: View {
                     AxisValueLabel { Text(v.as(Double.self).map { Format.value(.number($0), kind: block.kind) } ?? "") }
                 }
             }
-            .frame(height: 240)
+            .frame(height: max(240, viewport * 0.4))
         }
     }
 }
