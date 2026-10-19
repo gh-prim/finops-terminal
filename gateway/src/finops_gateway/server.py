@@ -15,6 +15,7 @@ gateway -> client
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import secrets
 from typing import Any
@@ -56,6 +57,9 @@ def create_app(token: str | None = None, hub: Hub | None = None, devices: Device
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # Provider calls run in threads and can block on slow upstreams (Yahoo, GDELT); the default
+        # pool (cpu + 4 threads) is too small on the VM, and one stuck call would stall every screen.
+        asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=48, thread_name_prefix="provider"))
         if database_url and app.state.devices is None:
             app.state.devices = await PostgresDeviceStore.connect(database_url)
         yield

@@ -13,7 +13,8 @@ let package = Package(
     ],
     targets: [
         .target(name: "FinopsCore"),
-        .target(name: "FinopsDash", dependencies: ["FinopsCore"]),
+        // world-land.json: Natural Earth 110m land outlines (public domain), for the world map.
+        .target(name: "FinopsDash", dependencies: ["FinopsCore"], resources: [.process("Resources")]),
         .target(name: "FinopsUI", dependencies: ["FinopsCore", "FinopsDash"]),
         .target(name: "FinopsRemote", dependencies: ["FinopsCore"]),
         .executableTarget(name: "FinopsTerminal", dependencies: ["FinopsCore", "FinopsUI", "FinopsRemote"]),

@@ -12,6 +12,9 @@ bundle="build/finops-terminal.app"
 rm -rf "$bundle"
 mkdir -p "$bundle/Contents/MacOS"
 cp ".build/$config/FinopsTerminal" "$bundle/Contents/MacOS/FinopsTerminal"
+# SwiftPM resource bundles (e.g. the world map outlines) live next to the executable.
+mkdir -p "$bundle/Contents/Resources"
+cp -R .build/$config/*.bundle "$bundle/Contents/Resources/" 2>/dev/null || true
 
 # App icon: design/icon-mac-1024.png (from scripts/make_icon.swift) → AppIcon.icns
 icon_src="../design/icon-mac-1024.png"
