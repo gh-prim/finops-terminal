@@ -119,23 +119,14 @@ struct DocumentView: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), alignment: .top)], alignment: .leading, spacing: 12) {
                     ForEach(cards, id: \.title) { KVCard(block: $0) }
                 }
-            case .block(let block):
-                switch block {
-                case .table(let table): TableBlockView(table: table, run: run)
-                case .text(let text): TextBlockView(block: text)
-                case .choices(let choices): ChoicesBar(block: choices, run: run)
-                case .kv(let kv): KVCard(block: kv)
-                case .treemap(let b): TreemapBlockView(block: b, run: run)
-                case .matrix(let b): MatrixBlockView(block: b, run: run)
-                case .scatter(let b): ScatterBlockView(block: b, run: run)
-                case .graph(let b): GraphBlockView(block: b, run: run)
-                case .bars(let b): BarsBlockView(block: b, run: run)
-                case .series(let b): SeriesBlockView(block: b)
-                case .donut(let b): DonutBlockView(block: b)
-                case .sparkgrid(let b): SparkGridBlockView(block: b, run: run)
-                case .map(let b): MapBlockView(block: b, run: run)
-                case .unknown: EmptyView()
+            case .flow(let blocks):
+                // Small blocks side by side: as many columns as the width allows, no wasted black.
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 430), spacing: 18, alignment: .top)],
+                          alignment: .leading, spacing: 18) {
+                    ForEach(blocks) { blockView($0) }
                 }
+            case .block(let block):
+                blockView(block)
             }
         }
 
@@ -162,16 +153,28 @@ struct DocumentView: View {
         }
     }
 
-    // Consecutive key/value blocks render side by side as cards.
+    // Consecutive key/value blocks render side by side as cards; consecutive small blocks
+    // (short tables, bars, donuts, series) flow into columns.
     private enum Group: Identifiable {
         case cards([GatewayDocument.KVBlock])
+        case flow([GatewayDocument.Block])
         case block(GatewayDocument.Block)
 
         var id: String {
             switch self {
             case .cards(let cards): "cards-" + cards.map { $0.title ?? "" }.joined(separator: "|")
+            case .flow(let blocks): "flow-" + blocks.map(\.id).joined(separator: "|")
             case .block(let block): block.id
             }
+        }
+    }
+
+    /// Fits in a column next to others: short, narrow tables and small charts.
+    private static func isCompact(_ block: GatewayDocument.Block) -> Bool {
+        switch block {
+        case .table(let t): t.rows.count <= 30 && t.columns.count <= 9
+        case .bars, .donut, .series: true
+        default: false
         }
     }
 
@@ -183,6 +186,12 @@ struct DocumentView: View {
                     out[out.count - 1] = .cards(existing + [kv])
                 } else {
                     out.append(.cards([kv]))
+                }
+            } else if Self.isCompact(block) {
+                switch out.last {
+                case .flow(let existing): out[out.count - 1] = .flow(existing + [block])
+                case .block(let previous) where Self.isCompact(previous): out[out.count - 1] = .flow([previous, block])
+                default: out.append(.block(block))
                 }
             } else {
                 out.append(.block(block))
@@ -272,6 +281,7 @@ struct TableBlockView: View {
     @Environment(\.openURL) private var openURL
     @State private var sortColumn: Int?
     @State private var ascending = false
+    @State private var available: CGFloat = 0
 
     private static let charWidth: CGFloat = 7.4
     static let rowHeight: CGFloat = 22
@@ -289,7 +299,7 @@ struct TableBlockView: View {
 
     var body: some View {
         let rows = prepared(sortedRows)
-        let widths = columnWidths(rows)
+        let widths = stretched(columnWidths(rows))
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 if let title = table.title { SectionLabel(title: title) }
@@ -328,6 +338,22 @@ struct TableBlockView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { available = $0 }
+    }
+
+    /// Spread spare width over the text columns (the longest gets most), so a table fills its
+    /// panel or grid cell instead of leaving a black margin. Never shrinks below the content.
+    private func stretched(_ widths: [CGFloat]) -> [CGFloat] {
+        let used = widths.reduce(0, +) + CGFloat(widths.count) * 8   // cells have 4 pt padding each side
+        let spare = available - used - 4
+        guard spare > 1 else { return widths }
+        let text = table.columns.indices.filter { table.columns[$0].kind == .text }
+        let targets = text.isEmpty ? Array(widths.indices) : text
+        let weight = targets.reduce(0) { $0 + widths[$1] }
+        var out = widths
+        for i in targets { out[i] += spare * (weight > 0 ? widths[i] / weight : 1 / CGFloat(targets.count)) }
+        return out
     }
 
     private func prepared(_ rows: [GatewayDocument.Row]) -> [PreparedRow] {
