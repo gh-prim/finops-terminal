@@ -29,7 +29,7 @@ from .securities import split_pair
 from .config import settings
 from .devices import DeviceStore, PostgresDeviceStore
 from .hub import Hub
-from .providers import article, binance, crypto_news, edgar, fred, yahoo
+from .providers import article, binance, crypto_news, edgar, fred, rwa, yahoo
 from .providers import yahoo_research as research
 from .providers import views
 from yfinance.exceptions import YFRateLimitError
@@ -304,6 +304,8 @@ class Connection:
                 return await asyncio.to_thread(intel.world_screen, p.get("kind", "ALL").upper(), int(p.get("severity") or 1))
             case "link":
                 return await asyncio.to_thread(intel.link_screen, p.get("query") or p.get("security", ""))
+            case "rwa":
+                return await asyncio.to_thread(rwa.rwa, p.get("kind", "OVERVIEW"))
             case "crypto":
                 if p.get("security"):
                     sec = securities.resolve(p["security"])

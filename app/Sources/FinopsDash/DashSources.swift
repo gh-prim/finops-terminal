@@ -17,6 +17,9 @@ public enum DashSource {
         ("Strait of Hormuz", "LINK HORMUZ"),
         ("Taiwan", "LINK TAIWAN"),
         ("Crypto market", "CRYPTO"),
+        ("Real-world assets", "RWA"),
+        ("Tokenized stocks (premium)", "RWA STOCKS"),
+        ("Tokenized treasuries", "RWA TREASURIES"),
         ("Market heatmap", "HEAT 1D"),
         ("World markets", "MKT"),
         ("Top gainers", "MOVERS GAINERS"),
@@ -55,6 +58,7 @@ public enum DashSource {
             return Request(service: "heatmap", params: ["period": first(periods, "1D"),
                                                         "sector": args.first { !periods.contains($0) } ?? ""])
         case .mkt: return Request(service: "market", params: [:])
+        case .rwa: return Request(service: "rwa", params: ["kind": args.first ?? "OVERVIEW"])
         case .world: return Request(service: "world", params: ["kind": args.first ?? "ALL"])
         case .link where args.isEmpty && !sec.isEmpty: return Request(service: "link", params: ["query": sec])
         case .link: return Request(service: "link", params: ["query": args.joined(separator: " ")])

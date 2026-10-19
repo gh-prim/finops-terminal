@@ -31,6 +31,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
     case ecal = "ECAL"
     case etf = "ETF"
     case crypto = "CRYPTO"
+    case rwa = "RWA"
     case tv = "TV"
     // Intelligence
     case world = "WORLD"
@@ -60,7 +61,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
     public var group: Group {
         switch self {
         case .quote, .chart, .desc, .news, .fin, .est, .evt, .hold, .file, .opt, .rv, .rels, .dcf, .sent, .why: .security
-        case .mkt, .movers, .scrn, .econ, .curve, .heat, .fxm, .wbi, .cbr, .ecal, .etf, .crypto, .tv: .market
+        case .mkt, .movers, .scrn, .econ, .curve, .heat, .fxm, .wbi, .cbr, .ecal, .etf, .crypto, .rwa, .tv: .market
         case .world, .link, .study, .rule, .caseFile, .expo: .intel
         case .port, .alert, .perf, .charts, .corr, .quant, .read, .dash, .help: .tools
         }
@@ -97,6 +98,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .ecal: ["ECAL"]
         case .etf: ["ETF"]
         case .crypto: ["CRYPTO", "CRYP", "XBT"]
+        case .rwa: ["RWA", "TOKENIZED"]
         case .tv: ["TV", "BTV"]
         case .world: ["WORLD", "WRLD", "GEO"]
         case .link: ["LINK", "LINKS"]
@@ -145,6 +147,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .ecal: "Economic calendar"
         case .etf: "ETFs"
         case .crypto: "Crypto"
+        case .rwa: "Real-world assets"
         case .tv: "Live TV"
         case .world: "World monitor"
         case .link: "World links"
@@ -192,6 +195,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .cbr: "Central bank policy rates (FRED)"
         case .ecal: "Economic releases (actual/expected/previous) and earnings. Args: ECO|EARN, TODAY|WEEK|2WEEKS, region"
         case .etf: "ETF market (TOP, PERFORMERS), or <etf> ETF for holdings, sectors, costs"
+        case .rwa: "Tokenized real-world assets: gold, treasuries, money-market funds, private credit, stocks (premium to the share). Args: GOLD TREASURIES MMF CREDIT STOCKS ETFS COMMODITIES"
         case .crypto: "Live crypto market from Binance (USDT USDC EUR BTC), or <coin> CRYPTO for order book and trades"
         case .world: "Conflicts, unrest, sanctions, disasters, shipping chokepoints, internet outages, prediction markets — on a map, linked to exposed assets. Args: CONFLICT UNREST COERCION DISASTER SHIPPING INTERNET ODDS"
         case .caseFile: "Investigations: follow entities and keywords, keep notes, pin screens (📌 or CASE PIN), show on TV. CASE NEW <name>"
@@ -243,6 +247,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .ecal: "calendar.badge.clock"
         case .etf: "chart.pie"
         case .crypto: "bitcoinsign.circle"
+        case .rwa: "building.columns.circle.fill"
         case .tv: "play.tv"
         case .world: "globe.americas"
         case .link: "point.3.filled.connected.trianglepath.dotted"

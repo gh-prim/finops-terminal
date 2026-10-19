@@ -249,6 +249,8 @@ struct PanelView: View {
             DocumentView(client: client, service: "etf", params: ["security": security], run: run)
         case .etf:
             DocumentView(client: client, service: "etf", params: ["list": args.first ?? "TOP"], run: run)
+        case .rwa:
+            DocumentView(client: client, service: "rwa", params: ["kind": args.first ?? "OVERVIEW"], run: run)
         case .crypto where args.isEmpty && security.hasSuffix(" CRYPTO"):
             DocumentView(client: client, service: "crypto", params: ["security": security], run: run)
         case .crypto:
