@@ -79,6 +79,9 @@ public enum DashSource {
         case .est where !sec.isEmpty: return Request(service: "estimates", params: ["security": sec])
         case .hold where !sec.isEmpty: return Request(service: "holders", params: ["security": sec])
         case .rels where !sec.isEmpty: return Request(service: "rels", params: ["security": sec])
+        case .study: return Request(service: "study", params: ["security": sec.isEmpty ? "SPX IDX" : sec,
+                                                               "args": args.joined(separator: " ")])
+        case .why where !sec.isEmpty: return Request(service: "why", params: ["security": sec])
         case .sent where !sec.isEmpty: return Request(service: "sentiment", params: ["security": sec])
         default: return nil
         }

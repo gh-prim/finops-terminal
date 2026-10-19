@@ -142,9 +142,10 @@ def bars(id: str, title: str | None, items: list[dict[str, Any]], kind: str = "n
             "items": [{**i, "value": cell(i["value"])} for i in items if cell(i.get("value")) is not None]}
 
 
-def series(id: str, title: str | None, lines: list[dict[str, Any]], kind: str = "number") -> dict[str, Any]:
-    """Line chart: [{"label", "points": [[t, v], …]}]"""
-    return {"type": "series", "id": id, "title": title, "kind": kind,
+def series(id: str, title: str | None, lines: list[dict[str, Any]], kind: str = "number",
+           x_kind: str = "time") -> dict[str, Any]:
+    """Line chart: [{"label", "points": [[x, v], …]}]; x is epoch seconds, or a plain number with x_kind="number"."""
+    return {"type": "series", "id": id, "title": title, "kind": kind, "xKind": x_kind,
             "lines": [{"label": l["label"], "points": [[cell(t), cell(v)] for t, v in l["points"] if cell(v) is not None]}
                       for l in lines]}
 

@@ -75,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // Touch ID before touching stored credentials (backend token, API keys).
         let hasSecrets = Self.backendHost.map(RemoteLink.hasToken(for:)) ?? false || AppSettings.hasFredApiKey
+            || AppSettings.hasAnthropicApiKey
         if hasSecrets, !(await SecretsGate.unlock()) {
             model.show(message: "Credentials locked — using local data without the backend. Reopen Settings → Backend to retry.")
             await useLocal(model, unlockedSecrets: false)

@@ -460,11 +460,22 @@ public struct SeriesBlockView: View {
             Chart {
                 ForEach(Array(block.lines.enumerated()), id: \.offset) { i, line in
                     ForEach(Array(line.points.enumerated()), id: \.offset) { _, p in
-                        LineMark(x: .value("Date", Date(timeIntervalSince1970: p[0])), y: .value("Value", p[1]),
-                                 series: .value("Line", line.label))
-                            .foregroundStyle(Heat.palette[i % Heat.palette.count])
-                            .lineStyle(StrokeStyle(lineWidth: i == 0 ? 1.8 : 1.2))
+                        if block.xKind == "number" {
+                            LineMark(x: .value("X", p[0]), y: .value("Value", p[1]), series: .value("Line", line.label))
+                                .foregroundStyle(Heat.palette[i % Heat.palette.count])
+                                .lineStyle(StrokeStyle(lineWidth: i == 0 ? 1.8 : 1.2))
+                        } else {
+                            LineMark(x: .value("Date", Date(timeIntervalSince1970: p[0])), y: .value("Value", p[1]),
+                                     series: .value("Line", line.label))
+                                .foregroundStyle(Heat.palette[i % Heat.palette.count])
+                                .lineStyle(StrokeStyle(lineWidth: i == 0 ? 1.8 : 1.2))
+                        }
                     }
+                }
+                if block.xKind == "number" {
+                    RuleMark(x: .value("Event", 0.0)).foregroundStyle(Palette.accent.opacity(0.6))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    RuleMark(y: .value("Zero", 0.0)).foregroundStyle(Palette.muted.opacity(0.5))
                 }
             }
             .chartLegend(.hidden)

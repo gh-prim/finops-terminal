@@ -17,6 +17,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
     case rels = "RELS"
     case dcf = "DCF"
     case sent = "SENT"
+    case why = "WHY"
     // Market screens
     case mkt = "MKT"
     case movers = "MOVERS"
@@ -34,6 +35,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
     // Intelligence
     case world = "WORLD"
     case link = "LINK"
+    case study = "STUDY"
     // Tools
     case port = "PORT"
     case alert = "ALERT"
@@ -54,9 +56,9 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
 
     public var group: Group {
         switch self {
-        case .quote, .chart, .desc, .news, .fin, .est, .evt, .hold, .file, .opt, .rv, .rels, .dcf, .sent: .security
+        case .quote, .chart, .desc, .news, .fin, .est, .evt, .hold, .file, .opt, .rv, .rels, .dcf, .sent, .why: .security
         case .mkt, .movers, .scrn, .econ, .curve, .heat, .fxm, .wbi, .cbr, .ecal, .etf, .crypto, .tv: .market
-        case .world, .link: .intel
+        case .world, .link, .study: .intel
         case .port, .alert, .perf, .charts, .corr, .quant, .read, .dash, .help: .tools
         }
     }
@@ -84,6 +86,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .rels: ["RELS"]
         case .dcf: ["DCF"]
         case .sent: ["SENT"]
+        case .why: ["WHY", "MOVE"]
         case .heat: ["HEAT", "IMAP"]
         case .fxm: ["FXM", "FXC"]
         case .wbi: ["WBI"]
@@ -94,6 +97,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .tv: ["TV", "BTV"]
         case .world: ["WORLD", "WRLD", "GEO"]
         case .link: ["LINK", "LINKS"]
+        case .study: ["STUDY", "EVTS"]
         case .perf: ["PERF"]
         case .charts: ["CHARTS"]
         case .corr: ["CORR"]
@@ -127,6 +131,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .rels: "Relationships"
         case .dcf: "DCF valuation"
         case .sent: "Sentiment"
+        case .why: "Why did it move?"
         case .heat: "Market heatmap"
         case .fxm: "Currency matrix"
         case .wbi: "World Bank"
@@ -137,6 +142,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .tv: "Live TV"
         case .world: "World monitor"
         case .link: "World links"
+        case .study: "Event study"
         case .perf: "Performance"
         case .charts: "Chart grid"
         case .corr: "Correlation"
@@ -170,6 +176,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .rels: "Relationship graph: industry peers, institutional holders, funds"
         case .dcf: "Discounted cash flow from SEC filings. Args: W<wacc%> G<growth%> T<terminal%>"
         case .sent: "Headline sentiment score from recent news"
+        case .why: "Why it moved: unusual-move check, headlines, world events on its exposures, macro, market and linked assets, and a written analysis by Claude"
         case .heat: "Treemap of the largest US companies. Args: 1D 1W 1M 3M YTD 1Y, sector"
         case .fxm: "Cross-rate matrix of major currencies, with 1-day moves"
         case .wbi: "World Bank indicators by country. Args: GDP CPI UNEMP DEBT CA GDPPC SIZE"
@@ -178,6 +185,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .etf: "ETF market (TOP, PERFORMERS), or <etf> ETF for holdings, sectors, costs"
         case .crypto: "Live crypto market from Binance (USDT USDC EUR BTC), or <coin> CRYPTO for order book and trades"
         case .world: "Conflicts, unrest, sanctions, disasters, shipping chokepoints, internet outages, prediction markets — on a map, linked to exposed assets. Args: CONFLICT UNREST COERCION DISASTER SHIPPING INTERNET ODDS"
+        case .study: "What an asset does after an event: <asset> STUDY WHEN CL1 CMD >3 · WHEN QUAKE TAIWAN 6.5 · DATES 2024-04-13,2024-10-01"
         case .link: "What an entity or security is connected to: LINK HORMUZ, LINK TAIWAN, LINK OIL, or <security> LINK"
         case .tv: "Live business TV (Bloomberg on YouTube). Args: BLOOMBERG, BLOOMBERG-LIVE or a YouTube video ID"
         case .perf: "Watchlist performance heat table (1D … 1Y, volatility)"
@@ -215,6 +223,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .rels: "point.3.connected.trianglepath.dotted"
         case .dcf: "function"
         case .sent: "face.smiling"
+        case .why: "questionmark.bubble"
         case .heat: "square.grid.3x3.fill"
         case .fxm: "dollarsign.arrow.circlepath"
         case .wbi: "globe.europe.africa"
@@ -225,6 +234,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .tv: "play.tv"
         case .world: "globe.americas"
         case .link: "point.3.filled.connected.trianglepath.dotted"
+        case .study: "chart.line.text.clipboard"
         case .perf: "tablecells.badge.ellipsis"
         case .charts: "square.grid.2x2"
         case .corr: "circle.hexagongrid"

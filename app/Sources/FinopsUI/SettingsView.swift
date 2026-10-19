@@ -4,10 +4,11 @@ import Foundation
 import Security
 import SwiftUI
 
-/// Provider settings. The FRED key lives in the Keychain; the EDGAR contact in UserDefaults.
+/// Provider settings. API keys live in the Keychain; the EDGAR contact in UserDefaults.
 public enum AppSettings {
     private static let service = "dev.finops.terminal"
     private static let fredAccount = "fred-api-key"
+    private static let anthropicAccount = "anthropic-api-key"
 
     public static var edgarContact: String {
         get { UserDefaults.standard.string(forKey: "edgarContact") ?? "" }
@@ -15,36 +16,49 @@ public enum AppSettings {
     }
 
     /// Whether a FRED key is stored, without reading it (no Keychain prompt).
-    public static var hasFredApiKey: Bool {
+    public static var hasFredApiKey: Bool { exists(fredAccount) }
+    public static var hasAnthropicApiKey: Bool { exists(anthropicAccount) }
+
+    public static var fredApiKey: String {
+        get { read(fredAccount) }
+        set { write(newValue, fredAccount) }
+    }
+
+    /// For WHY's written analysis (Claude).
+    public static var anthropicApiKey: String {
+        get { read(anthropicAccount) }
+        set { write(newValue, anthropicAccount) }
+    }
+
+    private static func exists(_ account: String) -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
-            kSecAttrAccount as String: fredAccount, kSecReturnAttributes as String: true,
+            kSecAttrAccount as String: account, kSecReturnAttributes as String: true,
         ]
         return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
     }
 
-    public static var fredApiKey: String {
-        get {
-            var item: CFTypeRef?
-            let query: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
-                kSecAttrAccount as String: fredAccount, kSecReturnData as String: true,
-            ]
-            guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-                  let data = item as? Data else { return "" }
-            return String(decoding: data, as: UTF8.self)
-        }
-        set {
-            let base: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
-                kSecAttrAccount as String: fredAccount,
-            ]
-            SecItemDelete(base as CFDictionary)
-            guard !newValue.isEmpty else { return }
-            var add = base
-            add[kSecValueData as String] = Data(newValue.utf8)
-            SecItemAdd(add as CFDictionary, nil)
-        }
+    private static func read(_ account: String) -> String {
+        var item: CFTypeRef?
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+            kSecAttrAccount as String: account, kSecReturnData as String: true,
+        ]
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data else { return "" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private static func write(_ value: String, _ account: String) {
+        let base: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(base as CFDictionary)
+        guard !value.isEmpty else { return }
+        var add = base
+        add[kSecValueData as String] = Data(value.utf8)
+        SecItemAdd(add as CFDictionary, nil)
     }
 }
 
@@ -53,7 +67,8 @@ extension TerminalModel {
     public func pushSettings() async {
         guard let client, await SecretsGate.unlock() else { return }
         do {
-            try await client.configure(edgarContact: AppSettings.edgarContact, fredApiKey: AppSettings.fredApiKey)
+            try await client.configure(edgarContact: AppSettings.edgarContact, fredApiKey: AppSettings.fredApiKey,
+                                        anthropicApiKey: AppSettings.anthropicApiKey)
         } catch {
             report(error)
         }
@@ -65,6 +80,7 @@ public struct SettingsView: View {
 
     @State private var edgarContact = AppSettings.edgarContact
     @State private var fredKey = ""
+    @State private var anthropicKey = ""
     @State private var saved = false
     @State private var requireBiometrics = SecretsGate.required
 
@@ -77,6 +93,11 @@ public struct SettingsView: View {
             Section("FRED (macro data: ECON, CURVE)") {
                 SecureField("API key", text: $fredKey)
                 Link("Get a free key at fred.stlouisfed.org", destination: URL(string: "https://fred.stlouisfed.org/docs/api/api_key.html")!)
+                    .font(.caption)
+            }
+            Section("Anthropic (WHY: written analysis by Claude)") {
+                SecureField("API key", text: $anthropicKey)
+                Link("Get a key at console.anthropic.com", destination: URL(string: "https://console.anthropic.com/settings/keys")!)
                     .font(.caption)
             }
             Section("Security") {
@@ -95,6 +116,7 @@ public struct SettingsView: View {
                 if saved { Text("Saved").foregroundStyle(.secondary) }
                 Button("Save") {
                     AppSettings.fredApiKey = fredKey.trimmingCharacters(in: .whitespaces)
+                    AppSettings.anthropicApiKey = anthropicKey.trimmingCharacters(in: .whitespaces)
                     AppSettings.edgarContact = edgarContact.trimmingCharacters(in: .whitespaces)
                     saved = true
                     Task { await model.pushSettings() }
@@ -105,7 +127,10 @@ public struct SettingsView: View {
         .formStyle(.grouped)
         .task {
             // Read the key only when Settings opens, after the launch unlock.
-            if await SecretsGate.unlock(reason: "show your finops API keys") { fredKey = AppSettings.fredApiKey }
+            if await SecretsGate.unlock(reason: "show your finops API keys") {
+                fredKey = AppSettings.fredApiKey
+                anthropicKey = AppSettings.anthropicApiKey
+            }
         }
         .frame(width: 460)
         .padding(.vertical, 8)

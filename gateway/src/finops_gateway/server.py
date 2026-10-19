@@ -33,6 +33,8 @@ from .providers import yahoo_research as research
 from .providers import views
 from .providers.http import HTTPError
 from .intel import markers as intel_markers
+from .intel import study as intel_study
+from .intel import why as intel_why
 from .intel import screens as intel
 
 log = logging.getLogger(__name__)
@@ -193,7 +195,9 @@ class Connection:
                 if p.get("fredApiKey", "").strip():
                     settings.fred_api_key = p["fredApiKey"].strip()
                     fred.dashboard.cache_clear()
-                return {"ok": True, "fred": bool(settings.fred_api_key)}
+                if p.get("anthropicApiKey", "").strip():
+                    settings.anthropic_api_key = p["anthropicApiKey"].strip()
+                return {"ok": True, "fred": bool(settings.fred_api_key), "anthropic": bool(settings.anthropic_api_key)}
             # Lot 1 — company
             case "profile":
                 return await asyncio.to_thread(research.profile, symbol())
@@ -271,6 +275,11 @@ class Connection:
                 return await asyncio.to_thread(article.read, str(params.get("url", "")).strip())
             case "markers":
                 return await asyncio.to_thread(intel_markers.markers, p.get("security", ""), p.get("range", "1Y").upper())
+            case "why":
+                return await asyncio.to_thread(intel_why.why, p.get("security", ""))
+            case "study":
+                return await asyncio.to_thread(intel_study.study, p.get("security") or "SPX IDX",
+                                               [a for a in p.get("args", "").upper().split() if a])
             case "world":
                 return await asyncio.to_thread(intel.world_screen, p.get("kind", "ALL").upper(), int(p.get("severity") or 1))
             case "link":

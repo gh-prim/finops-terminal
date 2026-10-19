@@ -43,6 +43,7 @@ services:
     environment:
       FINOPS_CACHE_DIR: /data
       FRED_API_KEY: ${FRED_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       FINOPS_EDGAR_CONTACT: ${EDGAR_CONTACT:-}
       DATABASE_URL: postgresql://finops:${POSTGRES_PASSWORD}@postgres:5432/finops
       REDIS_URL: redis://redis:6379/0

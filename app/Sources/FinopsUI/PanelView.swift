@@ -189,6 +189,8 @@ struct PanelView: View {
             DocumentView(client: client, service: "rels", params: ["security": security], run: run)
         case .dcf:
             DocumentView(client: client, service: "dcf", params: dcfParams(security: security, args: args), run: run)
+        case .why:
+            DocumentView(client: client, service: "why", params: ["security": security], run: run)
         case .sent:
             DocumentView(client: client, service: "sentiment", params: ["security": security], run: run)
         case .heat:
@@ -218,6 +220,9 @@ struct PanelView: View {
             DocumentView(client: client, service: "link", params: ["query": security], run: run)
         case .link:
             DocumentView(client: client, service: "link", params: ["query": args.isEmpty ? "HORMUZ" : args.joined(separator: " ")], run: run)
+        case .study:
+            DocumentView(client: client, service: "study", params: ["security": security.isEmpty ? "SPX IDX" : security,
+                                                                     "args": args.joined(separator: " ")], run: run)
         case .dash:
             DashboardBuilderView(model: model, client: model.client)
         case .read:

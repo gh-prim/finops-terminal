@@ -293,6 +293,8 @@ public extension GatewayDocument {
         public let title: String?
         public let kind: ValueKind
         public let lines: [Line]
+        /// "time" (epoch seconds, the default) or "number" (e.g. days relative to an event).
+        public let xKind: String?
     }
 
     struct DonutBlock: Decodable, Sendable {

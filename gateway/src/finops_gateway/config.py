@@ -10,6 +10,8 @@ from dataclasses import dataclass
 class Config:
     edgar_contact: str = os.environ.get("FINOPS_EDGAR_CONTACT", "")
     fred_api_key: str = os.environ.get("FRED_API_KEY", "")
+    # WHY's synthesis. Without a key WHY still shows the evidence, just no write-up.
+    anthropic_api_key: str = os.environ.get("ANTHROPIC_API_KEY", "")
 
     @property
     def edgar_user_agent(self) -> str:

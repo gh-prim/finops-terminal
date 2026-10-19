@@ -102,10 +102,11 @@ public actor DataClient {
     }
 
     /// Push provider settings. Empty values are omitted so they never erase what the server already has.
-    public func configure(edgarContact: String, fredApiKey: String) async throws {
+    public func configure(edgarContact: String, fredApiKey: String, anthropicApiKey: String = "") async throws {
         var params: [String: String] = [:]
         if !edgarContact.isEmpty { params["edgarContact"] = edgarContact }
         if !fredApiKey.isEmpty { params["fredApiKey"] = fredApiKey }
+        if !anthropicApiKey.isEmpty { params["anthropicApiKey"] = anthropicApiKey }
         guard !params.isEmpty else { return }
         _ = try await request("config", params, as: ConfigAck.self)
     }
