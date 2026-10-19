@@ -10,25 +10,22 @@ struct TickerWidget: View {
     let client: DataClient
 
     @State private var quotes: [String: Quote] = [:]
-    @State private var length: CGFloat = 1
+    @State private var length: CGFloat = 0
+    /// Scroll position at a reference time; moving it when the tape's length changes
+    /// keeps the motion continuous (a price getting a digit wider no longer makes it jump).
+    @State private var anchor = (time: Date.timeIntervalSinceReferenceDate, offset: CGFloat(0))
+
+    private var pointsPerSecond: CGFloat { CGFloat([25, 45, 75][min(max(widget.speed, 1), 3) - 1]) }
 
     var body: some View {
         GeometryReader { geo in
             let vertical = geo.size.height > geo.size.width
-            let pointsPerSecond = CGFloat([30, 55, 90][min(max(widget.speed, 1), 3) - 1])
             TimelineView(.animation) { context in
-                let travelled = CGFloat(context.date.timeIntervalSinceReferenceDate) * pointsPerSecond
-                let offset = -travelled.truncatingRemainder(dividingBy: max(length, 1))
-                Group {
-                    if vertical {
-                        VStack(alignment: .leading, spacing: 0) { strip(vertical: true); strip(vertical: true) }
-                            .offset(y: offset)
-                    } else {
-                        HStack(spacing: 0) { strip(vertical: false); strip(vertical: false) }
-                            .offset(x: offset)
-                    }
-                }
-                .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+                let offset = position(at: context.date.timeIntervalSinceReferenceDate)
+                tape(vertical: vertical)
+                    .drawingGroup()  // rasterize once per content change; scrolling is then a cheap GPU move
+                    .offset(x: vertical ? 0 : -offset, y: vertical ? -offset : 0)
+                    .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
             }
             .clipped()
         }
@@ -41,41 +38,87 @@ struct TickerWidget: View {
         }
     }
 
-    /// One full pass of the tape; drawn twice back to back so the loop is seamless.
+    private func position(at time: TimeInterval) -> CGFloat {
+        guard length > 0 else { return 0 }
+        let raw = anchor.offset + CGFloat(time - anchor.time) * pointsPerSecond
+        return raw.truncatingRemainder(dividingBy: length)
+    }
+
+    private func setLength(_ new: CGFloat) {
+        guard abs(new - length) > 0.5 else { return }
+        let now = Date.timeIntervalSinceReferenceDate
+        let current = position(at: now)
+        anchor = (now, new > 0 ? current.truncatingRemainder(dividingBy: new) : 0)
+        length = new
+    }
+
+    /// Two copies back to back, so the loop is seamless.
     @ViewBuilder
-    private func strip(vertical: Bool) -> some View {
-        let items = ForEach(widget.securities, id: \.self) { item($0, vertical: vertical) }
-        Group {
-            if vertical {
-                VStack(alignment: .leading, spacing: 0) { items }
-            } else {
-                HStack(spacing: 0) { items }
+    private func tape(vertical: Bool) -> some View {
+        if vertical {
+            VStack(alignment: .leading, spacing: 0) {
+                strip(vertical: true).background(measure(vertical: true))
+                strip(vertical: true)
+            }
+        } else {
+            HStack(spacing: 0) {
+                strip(vertical: false).background(measure(vertical: false))
+                strip(vertical: false)
             }
         }
-        .fixedSize()
-        .background(GeometryReader { g in
-            Color.clear.onAppear { length = vertical ? g.size.height : g.size.width }
-                .onChange(of: g.size) { length = vertical ? g.size.height : g.size.width }
-        })
+    }
+
+    private func measure(vertical: Bool) -> some View {
+        GeometryReader { g in
+            Color.clear
+                .onAppear { setLength(vertical ? g.size.height : g.size.width) }
+                .onChange(of: g.size) { setLength(vertical ? g.size.height : g.size.width) }
+        }
+    }
+
+    @ViewBuilder
+    private func strip(vertical: Bool) -> some View {
+        if vertical {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(widget.securities, id: \.self) { item($0, vertical: true) }
+            }
+            .fixedSize()
+        } else {
+            HStack(spacing: 0) {
+                ForEach(widget.securities, id: \.self) { item($0, vertical: false) }
+            }
+            .fixedSize()
+        }
     }
 
     private func item(_ security: String, vertical: Bool) -> some View {
         let quote = quotes[security]
         let change = quote?.changePct
         let arrow = change.map { $0 > 0 ? "▲" : $0 < 0 ? "▼" : "■" } ?? ""
-        return HStack(spacing: 6) {
-            Text(shortName(security)).foregroundStyle(Palette.accent)
-            Text(quote.map { Format.price($0.last) } ?? "—").foregroundStyle(Palette.text)
-            Text("\(arrow) \(Format.percent(change))").foregroundStyle(Palette.direction(change))
+        let price = Text(quote.map { Format.price($0.last) } ?? "—").foregroundStyle(Palette.text)
+        let move = Text("\(arrow) \(Format.percent(change))").foregroundStyle(Palette.direction(change))
+        return Group {
+            if vertical {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(shortName(security)).foregroundStyle(Palette.accent)
+                    HStack(spacing: 6) { price; move }
+                }
+                .padding(.horizontal, 8).padding(.vertical, 6)
+                .frame(width: DashboardView.bandThickness.vertical, alignment: .leading)
+                .overlay(alignment: .bottom) { Rectangle().fill(Palette.border).frame(height: 1) }
+            } else {
+                HStack(spacing: 6) {
+                    Text(shortName(security)).foregroundStyle(Palette.accent)
+                    price
+                    move
+                }
+                .padding(.horizontal, 14)
+                .overlay(alignment: .trailing) { Rectangle().fill(Palette.border).frame(width: 1, height: 14) }
+            }
         }
-        .font(.system(size: 15, weight: .semibold, design: .monospaced))
+        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+        .monospacedDigit()
         .lineLimit(1)
-        .padding(.horizontal, vertical ? 8 : 18)
-        .padding(.vertical, vertical ? 7 : 0)
-        .frame(maxHeight: vertical ? nil : .infinity)
-        .overlay(alignment: vertical ? .bottom : .trailing) {
-            Rectangle().fill(Palette.border).frame(width: vertical ? nil : 1, height: vertical ? 1 : 18)
-        }
     }
 
     private func stream(_ security: String) async {

@@ -92,6 +92,23 @@ public final class DashboardStore {
         return newID
     }
 
+    /// Turn the dashboard's ticker band on (adding `securities` to it), keeping any existing list.
+    public func enableBand(on id: UUID, securities: [String] = []) {
+        update(id) { dashboard in
+            var band = dashboard.band ?? DashWidget(kind: .ticker, securities: DashWidget.tickerTape)
+            for security in securities where !band.securities.contains(security) { band.securities.insert(security, at: 0) }
+            dashboard.band = band
+        }
+    }
+
+    public func updateBand(on id: UUID, _ change: (inout DashWidget) -> Void) {
+        update(id) { dashboard in
+            guard var band = dashboard.band else { return }
+            change(&band)
+            dashboard.band = band
+        }
+    }
+
     public func removeWidget(_ widgetID: UUID, from id: UUID) {
         update(id) { $0.widgets.removeAll { $0.id == widgetID } }
     }

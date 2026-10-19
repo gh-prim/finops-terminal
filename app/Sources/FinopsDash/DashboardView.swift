@@ -6,6 +6,8 @@ import SwiftUI
 public struct DashboardView: View {
     public static let canvas = CGSize(width: 1200, height: 675)
     public static let gap: CGFloat = 6
+    /// Ticker band thickness: a single line across, or a narrow column on a side.
+    public static let bandThickness: (horizontal: CGFloat, vertical: CGFloat) = (28, 170)
 
     let dashboard: Dashboard
     let client: DataClient?
@@ -22,6 +24,18 @@ public struct DashboardView: View {
     public var body: some View {
         ZStack(alignment: .topLeading) {
             Palette.background
+            if let band = dashboard.band, let client {
+                let frame = Self.bandFrame(dashboard)
+                TickerWidget(widget: band, client: client)
+                    .frame(width: frame.width, height: frame.height)
+                    .background(Palette.surface)
+                    .overlay(alignment: Self.innerEdge(dashboard.edge)) {
+                        Rectangle().fill(Palette.accent.opacity(0.6))
+                            .frame(width: dashboard.edge.isVertical ? 1 : nil, height: dashboard.edge.isVertical ? nil : 1)
+                    }
+                    .clipped()
+                    .offset(x: frame.minX, y: frame.minY)
+            }
             ForEach(dashboard.widgets) { widget in
                 let frame = Self.frame(of: widget, in: dashboard)
                 WidgetView(widget: widget, client: client)
@@ -42,11 +56,44 @@ public struct DashboardView: View {
         .clipped()
     }
 
+    /// The area the widget grid fills: the canvas minus the ticker band, if any.
+    public static func gridArea(_ dashboard: Dashboard) -> CGRect {
+        let full = CGRect(origin: .zero, size: canvas)
+        guard dashboard.band != nil else { return full }
+        let (h, v) = bandThickness
+        switch dashboard.edge {
+        case .bottom: return CGRect(x: 0, y: 0, width: full.width, height: full.height - h)
+        case .top: return CGRect(x: 0, y: h, width: full.width, height: full.height - h)
+        case .left: return CGRect(x: v, y: 0, width: full.width - v, height: full.height)
+        case .right: return CGRect(x: 0, y: 0, width: full.width - v, height: full.height)
+        }
+    }
+
+    public static func bandFrame(_ dashboard: Dashboard) -> CGRect {
+        let (h, v) = bandThickness
+        switch dashboard.edge {
+        case .bottom: return CGRect(x: 0, y: canvas.height - h, width: canvas.width, height: h)
+        case .top: return CGRect(x: 0, y: 0, width: canvas.width, height: h)
+        case .left: return CGRect(x: 0, y: 0, width: v, height: canvas.height)
+        case .right: return CGRect(x: canvas.width - v, y: 0, width: v, height: canvas.height)
+        }
+    }
+
+    private static func innerEdge(_ edge: Dashboard.BandEdge) -> Alignment {
+        switch edge {
+        case .bottom: .top
+        case .top: .bottom
+        case .left: .trailing
+        case .right: .leading
+        }
+    }
+
     /// Where a widget sits on the canvas.
     public static func frame(of widget: DashWidget, in dashboard: Dashboard) -> CGRect {
-        let cellW = (canvas.width - gap) / CGFloat(max(dashboard.columns, 1))
-        let cellH = (canvas.height - gap) / CGFloat(max(dashboard.rows, 1))
-        return CGRect(x: gap + CGFloat(widget.x) * cellW, y: gap + CGFloat(widget.y) * cellH,
+        let area = gridArea(dashboard)
+        let cellW = (area.width - gap) / CGFloat(max(dashboard.columns, 1))
+        let cellH = (area.height - gap) / CGFloat(max(dashboard.rows, 1))
+        return CGRect(x: area.minX + gap + CGFloat(widget.x) * cellW, y: area.minY + gap + CGFloat(widget.y) * cellH,
                       width: max(CGFloat(widget.w) * cellW - gap, 10), height: max(CGFloat(widget.h) * cellH - gap, 10))
     }
 }

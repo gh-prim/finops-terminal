@@ -59,9 +59,14 @@ struct DashboardBuilderView: View {
                 .frame(width: 160)
 
             Menu {
+                Button { store.enableBand(on: dashboard.id) } label: {
+                    Label("Ticker band (thin, along an edge)", systemImage: "text.line.first.and.arrowtriangle.forward")
+                }
+                .disabled(dashboard.band != nil)
+                Divider()
                 ForEach(DashWidget.Kind.allCases) { kind in
                     Button { selection = store.addWidget(kind, to: dashboard.id) } label: {
-                        Label(kind.title, systemImage: kind.systemImage)
+                        Label(kind == .ticker ? "Ticker tape (as a tile)" : kind.title, systemImage: kind.systemImage)
                     }
                 }
             } label: {
@@ -104,11 +109,19 @@ struct DashboardBuilderView: View {
 
     /// Faint cell grid while editing, so placement is predictable.
     private func grid(_ dashboard: Dashboard, scale: CGFloat) -> some View {
-        Canvas { context, size in
+        Canvas { context, _ in
             let cols = CGFloat(dashboard.columns), rows = CGFloat(dashboard.rows)
+            let area = DashboardView.gridArea(dashboard)
+            let r = CGRect(x: area.minX * scale, y: area.minY * scale, width: area.width * scale, height: area.height * scale)
             var path = Path()
-            for i in 1..<dashboard.columns { path.move(to: CGPoint(x: size.width * CGFloat(i) / cols, y: 0)); path.addLine(to: CGPoint(x: size.width * CGFloat(i) / cols, y: size.height)) }
-            for j in 1..<dashboard.rows { path.move(to: CGPoint(x: 0, y: size.height * CGFloat(j) / rows)); path.addLine(to: CGPoint(x: size.width, y: size.height * CGFloat(j) / rows)) }
+            for i in 1..<dashboard.columns {
+                let x = r.minX + r.width * CGFloat(i) / cols
+                path.move(to: CGPoint(x: x, y: r.minY)); path.addLine(to: CGPoint(x: x, y: r.maxY))
+            }
+            for j in 1..<dashboard.rows {
+                let y = r.minY + r.height * CGFloat(j) / rows
+                path.move(to: CGPoint(x: r.minX, y: y)); path.addLine(to: CGPoint(x: r.maxX, y: y))
+            }
             context.stroke(path, with: .color(.white.opacity(drag == nil ? 0.03 : 0.08)), lineWidth: 0.5)
         }
         .allowsHitTesting(false)
@@ -118,8 +131,9 @@ struct DashboardBuilderView: View {
         let frame = DashboardView.frame(of: widget, in: dashboard)
         let rect = CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale, height: frame.height * scale)
         let active = drag?.id == widget.id ? drag : nil
-        let cell = CGSize(width: DashboardView.canvas.width * scale / CGFloat(dashboard.columns),
-                          height: DashboardView.canvas.height * scale / CGFloat(dashboard.rows))
+        let area = DashboardView.gridArea(dashboard)
+        let cell = CGSize(width: area.width * scale / CGFloat(dashboard.columns),
+                          height: area.height * scale / CGFloat(dashboard.rows))
         let selected = selection == widget.id
 
         return ZStack(alignment: .bottomTrailing) {
@@ -171,16 +185,20 @@ struct DashboardBuilderView: View {
                             remove: { store.removeWidget(id, from: dashboard.id); selection = nil })
                 .id(id)
         } else {
-            VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(title: "Dashboard")
-                Text("\(dashboard.widgets.count) widgets on a \(dashboard.columns) × \(dashboard.rows) grid.")
-                    .font(.terminalSmall).foregroundStyle(Palette.muted)
-                Text("Select a widget to edit it, or add one with Add widget.")
-                    .font(.terminalSmall).foregroundStyle(Palette.muted)
-                Spacer()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    SectionLabel(title: "Dashboard")
+                    Text("\(dashboard.widgets.count) widgets on a \(dashboard.columns) × \(dashboard.rows) grid.")
+                        .font(.terminalSmall).foregroundStyle(Palette.muted)
+                    Text("Select a widget to edit it, or add one with Add widget.")
+                        .font(.terminalSmall).foregroundStyle(Palette.muted)
+                    Divider()
+                    BandInspector(dashboard: dashboard, store: store, watchlist: model.watchlist)
+                        .id(dashboard.id)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -479,5 +497,47 @@ private struct WidgetInspector: View {
             SectionLabel(title: title)
             content()
         }
+    }
+}
+
+/// The dashboard's ticker band: on/off, edge, speed, tickers.
+private struct BandInspector: View {
+    let dashboard: Dashboard
+    let store: DashboardStore
+    let watchlist: [String]
+
+    @State private var text = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: Binding(get: { dashboard.band != nil }, set: { on in
+                if on { store.enableBand(on: dashboard.id) } else { store.update(dashboard.id) { $0.band = nil } }
+            })) {
+                SectionLabel(title: "Ticker band")
+            }
+            if let band = dashboard.band {
+                Picker("Edge", selection: Binding(get: { dashboard.edge }, set: { edge in store.update(dashboard.id) { $0.bandEdge = edge } })) {
+                    ForEach(Dashboard.BandEdge.allCases) { Text($0.rawValue.capitalized).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                Picker("Speed", selection: Binding(get: { band.speed }, set: { v in store.updateBand(on: dashboard.id) { $0.speed = v } })) {
+                    Text("Slow").tag(1); Text("Normal").tag(2); Text("Fast").tag(3)
+                }
+                .pickerStyle(.segmented)
+                SectionLabel(title: "Tickers")
+                TextField("SPX IDX, AAPL US EQ, BTC CRYPTO", text: $text, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(3...8)
+                    .onChange(of: text) { commit() }
+                Button("Use watchlist") { text = watchlist.joined(separator: ", ") }.controlSize(.small)
+            }
+        }
+        .onAppear { text = dashboard.band?.securities.joined(separator: ", ") ?? "" }
+        .onChange(of: dashboard.band != nil) { text = dashboard.band?.securities.joined(separator: ", ") ?? "" }
+    }
+
+    private func commit() {
+        let list = text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }.filter { !$0.isEmpty }
+        if list != dashboard.band?.securities { store.updateBand(on: dashboard.id) { $0.securities = list } }
     }
 }

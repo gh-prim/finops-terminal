@@ -8,14 +8,28 @@ public struct Dashboard: Codable, Sendable, Hashable, Identifiable {
     public var columns: Int
     public var rows: Int
     public var widgets: [DashWidget]
+    /// A thin ticker tape along one edge, outside the grid (nil = none).
+    public var band: DashWidget?
+    public var bandEdge: BandEdge?
 
-    public init(id: UUID = UUID(), name: String, columns: Int = 12, rows: Int = 8, widgets: [DashWidget] = []) {
+    public enum BandEdge: String, Codable, Sendable, CaseIterable, Identifiable {
+        case bottom, top, left, right
+        public var id: String { rawValue }
+        public var isVertical: Bool { self == .left || self == .right }
+    }
+
+    public init(id: UUID = UUID(), name: String, columns: Int = 12, rows: Int = 8, widgets: [DashWidget] = [],
+                band: DashWidget? = nil, bandEdge: BandEdge? = nil) {
         self.id = id
         self.name = name
         self.columns = columns
         self.rows = rows
         self.widgets = widgets
+        self.band = band
+        self.bandEdge = bandEdge
     }
+
+    public var edge: BandEdge { bandEdge ?? .bottom }
 
     /// First free spot for a w × h widget (top-left first), or the bottom-left corner if full.
     public func freeSlot(w: Int, h: Int) -> (x: Int, y: Int) {
@@ -248,10 +262,9 @@ public extension Dashboard {
             DashWidget(kind: .quotes, x: 6, y: 1, w: 6, h: 2,
                        securities: ["SPX IDX", "NDX IDX", "CAC IDX", "EURUSD FX", "BTC CRYPTO", "ETH CRYPTO"]),
             DashWidget(kind: .chart, x: 6, y: 3, w: 6, h: 2, securities: ["BTC CRYPTO"], range: "1D", interval: "5MIN"),
-            DashWidget(kind: .screen, title: "Crypto market", x: 0, y: 5, w: 4, h: 2, command: "CRYPTO"),
-            DashWidget(kind: .compare, x: 4, y: 5, w: 4, h: 2, securities: ["SPX IDX", "NDX IDX", "CAC IDX"], range: "1M"),
-            DashWidget(kind: .news, x: 8, y: 5, w: 4, h: 2, command: "NEWS CRYPTO"),
-            DashWidget(kind: .ticker, x: 0, y: 7, w: 12, h: 1, securities: DashWidget.tickerTape),
-        ])
+            DashWidget(kind: .screen, title: "Crypto market", x: 0, y: 5, w: 4, h: 3, command: "CRYPTO"),
+            DashWidget(kind: .compare, x: 4, y: 5, w: 4, h: 3, securities: ["SPX IDX", "NDX IDX", "CAC IDX"], range: "1M"),
+            DashWidget(kind: .news, x: 8, y: 5, w: 4, h: 3, command: "NEWS CRYPTO"),
+        ], band: DashWidget(kind: .ticker, securities: DashWidget.tickerTape))
     }
 }

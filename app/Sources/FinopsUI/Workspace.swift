@@ -357,6 +357,11 @@ public final class TerminalModel {
                 return false
             }
             let securities = state.security.map { [$0] } ?? []
+            if kind == .ticker {
+                dashboards.enableBand(on: id, securities: securities)
+                message = "Ticker band on \(dashboards.current?.name ?? "dashboard")"
+                return true
+            }
             dashboards.addWidget(kind, to: id, securities: securities)
             if kind == .news, let security = state.security, let widget = dashboards.current?.widgets.last {
                 dashboards.updateWidget(widget.id, in: id) { $0.command = "\(security) NEWS" }
