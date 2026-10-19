@@ -31,8 +31,12 @@ from .hub import Hub
 from .providers import article, binance, crypto_news, edgar, fred, yahoo
 from .providers import yahoo_research as research
 from .providers import views
+from yfinance.exceptions import YFRateLimitError
+
+from .providers import yahoo_guard
 from .providers.http import HTTPError
 from .intel import markers as intel_markers
+from .intel import exposure as intel_exposure
 from .intel import rules as intel_rules
 from .intel import study as intel_study
 from .intel import why as intel_why
@@ -154,6 +158,8 @@ class Connection:
                         await self.send({"t": "subStatus", "cid": cid, "status": "terminated"})
                 case other:
                     raise ValueError(f"unknown message type {other!r}")
+        except YFRateLimitError:
+            await self.send({"t": "error", "cid": cid, "code": "rate_limited", "message": yahoo_guard.message()})
         except (ValueError, LookupError, HTTPError) as exc:
             await self.send({"t": "error", "cid": cid, "code": "bad_request", "message": str(exc)})
         except Exception as exc:
@@ -286,6 +292,10 @@ class Connection:
                 return await asyncio.to_thread(intel_rules.evaluate, str(params.get("rules", "[]")))
             case "rule_presets":
                 return intel_rules.presets()
+            case "case_feed":
+                return await asyncio.to_thread(intel_exposure.case_feed, str(params.get("terms", "")))
+            case "exposure":
+                return await asyncio.to_thread(intel_exposure.exposure, p.get("positions", ""))
             case "world":
                 return await asyncio.to_thread(intel.world_screen, p.get("kind", "ALL").upper(), int(p.get("severity") or 1))
             case "link":

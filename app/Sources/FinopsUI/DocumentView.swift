@@ -20,6 +20,72 @@ struct DocumentView: View {
     @State private var failure: String?
 
     var body: some View {
+        SwiftUI.Group {
+            if let document, failure == nil, document.layout == "map" {
+                mapLayout(document)
+            } else {
+                scrolling
+            }
+        }
+        .task { await load() }
+    }
+
+    /// Map screens (WORLD, case feeds): the whole world map on the left two thirds, full height;
+    /// tabs, figures and tables in a scrolling column on the right third.
+    private func mapLayout(_ document: GatewayDocument) -> some View {
+        let map = document.blocks.first { if case .map = $0 { true } else { false } }
+        let rest = document.blocks.filter { $0.id != map?.id }
+        return GeometryReader { geo in
+            HStack(alignment: .top, spacing: 0) {
+                if case .map(let m) = map {
+                    MapBlockView(block: m, run: run, height: nil, wholeWorld: true)
+                        .padding(10)
+                        .frame(width: geo.size.width * 2 / 3, height: geo.size.height)
+                }
+                Divider().overlay(Palette.border)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(document.title).font(.system(size: 14, weight: .semibold, design: .monospaced))
+                            Spacer()
+                            Text("as of \(Format.time(Date(timeIntervalSince1970: document.asOf)))")
+                                .font(.terminalSmall).foregroundStyle(Palette.muted)
+                        }
+                        ForEach(rest) { block in
+                            if case .choices(let c) = block { WrappingChoices(block: c, run: run) } else { blockView(block) }
+                        }
+                        ForEach(document.notes, id: \.self) { Text($0).font(.terminalSmall).foregroundStyle(Palette.muted) }
+                        Text("Source: \(document.source)").font(.terminalSmall).foregroundStyle(Palette.muted)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(width: geo.size.width / 3)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func blockView(_ block: GatewayDocument.Block) -> some View {
+        switch block {
+        case .table(let table): TableBlockView(table: table, run: run)
+        case .text(let text): TextBlockView(block: text)
+        case .choices(let choices): ChoicesBar(block: choices, run: run)
+        case .kv(let kv): KVCard(block: kv)
+        case .treemap(let b): TreemapBlockView(block: b, run: run)
+        case .matrix(let b): MatrixBlockView(block: b, run: run)
+        case .scatter(let b): ScatterBlockView(block: b, run: run)
+        case .graph(let b): GraphBlockView(block: b, run: run)
+        case .bars(let b): BarsBlockView(block: b, run: run)
+        case .series(let b): SeriesBlockView(block: b)
+        case .donut(let b): DonutBlockView(block: b)
+        case .sparkgrid(let b): SparkGridBlockView(block: b, run: run)
+        case .map(let b): MapBlockView(block: b, run: run)
+        case .unknown: EmptyView()
+        }
+    }
+
+    private var scrolling: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if let failure {
@@ -33,7 +99,6 @@ struct DocumentView: View {
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .task { await load() }
     }
 
     @ViewBuilder
@@ -423,5 +488,43 @@ struct CSVExport: Transferable {
     static var transferRepresentation: some TransferRepresentation {
         DataRepresentation(exportedContentType: .commaSeparatedText) { Data($0.csv.utf8) }
             .suggestedFileName { $0.name }
+    }
+}
+
+/// Choice buttons that wrap onto several lines (narrow side column).
+private struct WrappingChoices: View {
+    let block: GatewayDocument.ChoicesBlock
+    let run: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let title = block.title { SectionLabel(title: title) }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 4)], alignment: .leading, spacing: 4) {
+                ForEach(block.items, id: \.self) { item in
+                    Button(item.label) { run(item.cmd) }
+                        .buttonStyle(TerminalButtonStyle(selected: item.label == block.selected))
+                }
+            }
+        }
+    }
+}
+
+/// A key/value block as one line of figures (map screens keep their height for the map).
+private struct InlineFigures: View {
+    let block: GatewayDocument.KVBlock
+
+    var body: some View {
+        HStack(spacing: 16) {
+            if let title = block.title { SectionLabel(title: title) }
+            ForEach(block.items, id: \.self) { item in
+                HStack(spacing: 5) {
+                    Text(item.label).foregroundStyle(Palette.muted)
+                    Text(Format.value(item.value, kind: item.kind)).foregroundStyle(Format.color(item.value, kind: item.kind))
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.terminalSmall)
+        .lineLimit(1)
     }
 }

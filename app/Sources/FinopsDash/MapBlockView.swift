@@ -8,13 +8,16 @@ public struct MapBlockView: View {
     let block: GatewayDocument.MapBlock
     let run: (String) -> Void
     var height: CGFloat? = 420
+    /// Frame the whole world (WORLD's main map) rather than the populated band.
+    var wholeWorld = false
 
     @State private var selected: GatewayDocument.MapBlock.Point?
 
-    public init(block: GatewayDocument.MapBlock, run: @escaping (String) -> Void, height: CGFloat? = 420) {
+    public init(block: GatewayDocument.MapBlock, run: @escaping (String) -> Void, height: CGFloat? = 420, wholeWorld: Bool = false) {
         self.block = block
         self.run = run
         self.height = height
+        self.wholeWorld = wholeWorld
     }
 
     public static func color(_ kind: String?) -> Color {
@@ -34,8 +37,9 @@ public struct MapBlockView: View {
         VStack(alignment: .leading, spacing: 6) {
             if let title = block.title { SectionLabel(title: title) }
             ZStack(alignment: .bottomLeading) {
-                Map(initialPosition: .rect(MKMapRect(x: 0, y: MKMapSize.world.height * 0.12,
-                                                     width: MKMapSize.world.width, height: MKMapSize.world.height * 0.66))) {
+                Map(initialPosition: .rect(wholeWorld ? MKMapRect.world
+                                           : MKMapRect(x: 0, y: MKMapSize.world.height * 0.12,
+                                                       width: MKMapSize.world.width, height: MKMapSize.world.height * 0.66))) {
                     ForEach(block.points) { point in
                         Annotation("", coordinate: CLLocationCoordinate2D(latitude: point.lat, longitude: point.lon), anchor: .center) {
                             dot(point)

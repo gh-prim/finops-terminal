@@ -37,6 +37,8 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
     case link = "LINK"
     case study = "STUDY"
     case rule = "RULE"
+    case caseFile = "CASE"
+    case expo = "EXPO"
     // Tools
     case port = "PORT"
     case alert = "ALERT"
@@ -59,7 +61,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         switch self {
         case .quote, .chart, .desc, .news, .fin, .est, .evt, .hold, .file, .opt, .rv, .rels, .dcf, .sent, .why: .security
         case .mkt, .movers, .scrn, .econ, .curve, .heat, .fxm, .wbi, .cbr, .ecal, .etf, .crypto, .tv: .market
-        case .world, .link, .study, .rule: .intel
+        case .world, .link, .study, .rule, .caseFile, .expo: .intel
         case .port, .alert, .perf, .charts, .corr, .quant, .read, .dash, .help: .tools
         }
     }
@@ -100,6 +102,8 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .link: ["LINK", "LINKS"]
         case .study: ["STUDY", "EVTS"]
         case .rule: ["RULE", "RULES"]
+        case .caseFile: ["CASE", "CASES"]
+        case .expo: ["EXPO", "EXPOSURE"]
         case .perf: ["PERF"]
         case .charts: ["CHARTS"]
         case .corr: ["CORR"]
@@ -146,6 +150,8 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .link: "World links"
         case .study: "Event study"
         case .rule: "Cross alerts"
+        case .caseFile: "Cases"
+        case .expo: "World exposure"
         case .perf: "Performance"
         case .charts: "Chart grid"
         case .corr: "Correlation"
@@ -188,6 +194,8 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .etf: "ETF market (TOP, PERFORMERS), or <etf> ETF for holdings, sectors, costs"
         case .crypto: "Live crypto market from Binance (USDT USDC EUR BTC), or <coin> CRYPTO for order book and trades"
         case .world: "Conflicts, unrest, sanctions, disasters, shipping chokepoints, internet outages, prediction markets — on a map, linked to exposed assets. Args: CONFLICT UNREST COERCION DISASTER SHIPPING INTERNET ODDS"
+        case .caseFile: "Investigations: follow entities and keywords, keep notes, pin screens (📌 or CASE PIN), show on TV. CASE NEW <name>"
+        case .expo: "Where your portfolio (or watchlist: EXPO WATCH) is exposed — countries, chokepoints, commodities — and the risks there now"
         case .rule: "Rules across sources (prices, chokepoints, conflict, disasters, quakes, outages, keywords) that notify when all hold. RULE ADD <preset>, RULE CHECK"
         case .study: "What an asset does after an event: <asset> STUDY WHEN CL1 CMD >3 · WHEN QUAKE TAIWAN 6.5 · DATES 2024-04-13,2024-10-01"
         case .link: "What an entity or security is connected to: LINK HORMUZ, LINK TAIWAN, LINK OIL, or <security> LINK"
@@ -240,6 +248,8 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .link: "point.3.filled.connected.trianglepath.dotted"
         case .study: "chart.line.text.clipboard"
         case .rule: "bell.badge"
+        case .caseFile: "folder.badge.person.crop"
+        case .expo: "scope"
         case .perf: "tablecells.badge.ellipsis"
         case .charts: "square.grid.2x2"
         case .corr: "circle.hexagongrid"
@@ -296,7 +306,7 @@ public enum CommandParser {
                 }
             }
             // Video IDs and links are case-sensitive.
-            let args = [.tv, .read, .dash, .link].contains(function) ? Array(original[argsStart...]) : Array(tokens[argsStart...])
+            let args = [.tv, .read, .dash, .link, .caseFile].contains(function) ? Array(original[argsStart...]) : Array(tokens[argsStart...])
             return .run(security: security.isEmpty ? nil : security, function: function, args: args)
         }
         return .run(security: tokens.joined(separator: " "), function: nil, args: [])

@@ -99,7 +99,7 @@ def world_screen(kind: str = "ALL", min_severity: int = 1) -> dict[str, Any]:
     notes = ["Click an event to open its source, or a map point / chokepoint to see the entity and its exposed assets (LINK)."]
     if failed:
         notes.append(f"Unavailable right now: {', '.join(failed)}.")
-    return document("World monitor", blocks, SOURCE, notes=notes, refresh=300)
+    return document("World monitor", blocks, SOURCE, notes=notes, refresh=300, layout="map")
 
 
 # MARK: LINK

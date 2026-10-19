@@ -14,6 +14,11 @@ from typing import Any, ParamSpec, TypeVar
 import pandas as pd
 import yfinance as yf
 
+from ..cache import ttl_cache
+from . import yahoo_guard
+
+yahoo_guard.install()
+
 CACHE_DIR = Path(
     os.environ.get("FINOPS_CACHE_DIR", Path.home() / "Library/Application Support/finops-terminal")
 ) / "yfinance"
@@ -123,6 +128,7 @@ def _four_hour(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+@ttl_cache(120, maxsize=256)
 @_retry_locked
 def history(symbol: str, range_code: str, interval_code: str | None = None) -> dict[str, Any]:
     if range_code not in RANGES:
@@ -145,6 +151,7 @@ def history(symbol: str, range_code: str, interval_code: str | None = None) -> d
             "bars": _bars(df)}
 
 
+@ttl_cache(10, maxsize=512)
 @_retry_locked
 def quote(symbol: str) -> dict[str, Any]:
     fi = yf.Ticker(symbol).fast_info

@@ -76,6 +76,10 @@ public final class TerminalModel {
     public private(set) var layout: Layout = .single
     public private(set) var message: String?
     public var commandText = ""
+    /// Sidebar shown as an icon rail (more room for the panels).
+    public var sidebarCollapsed = UserDefaults.standard.bool(forKey: "sidebar.collapsed") {
+        didSet { UserDefaults.standard.set(sidebarCollapsed, forKey: "sidebar.collapsed") }
+    }
 
     public private(set) var watchlists: [Watchlist]
     public var currentWatchlistID: UUID { didSet { defaults.set(currentWatchlistID.uuidString, forKey: "currentWatchlist") } }
@@ -84,6 +88,7 @@ public final class TerminalModel {
     public let quotes = QuoteBoard()
     public let dashboards = DashboardStore()
     public let rules = RuleBook()
+    public let cases = CaseBook()
 
     /// Set by the app to deliver system notifications for triggered alerts.
     @ObservationIgnored public var notify: ((String, String) -> Void)?
@@ -273,6 +278,12 @@ public final class TerminalModel {
                 message = "\(next.function.rawValue) needs a security, e.g. AAPL US EQ \(next.function.rawValue)"
                 return
             }
+            // CASE PIN pins the screen the panel shows now; it doesn't navigate.
+            if next.function == .caseFile, args.first?.uppercased() == "PIN" {
+                let file = cases.pin(command: panel.state.command, title: "\(panel.state.security.map { "\($0) · " } ?? "")\(panel.state.function.title)")
+                message = "Pinned to case \(file.name)"
+                return
+            }
             if !handleToolArgs(&next) { return }
             if next.function == .chart {
                 let unknown = ChartConfig.unknownTokens(in: next.args)
@@ -323,6 +334,13 @@ public final class TerminalModel {
                 trackQuotes()
             }
             state.args = []
+        case .caseFile where state.args.first?.uppercased() == "NEW":
+            let name = state.args.dropFirst().joined(separator: " ")
+            let file = cases.create(name.isEmpty ? "Investigation" : name)
+            message = "Created case \(file.name)"
+            state.args = []
+        case .caseFile where state.args.first?.uppercased() == "FEED":
+            break  // CASE FEED <terms>: the live feed alone (used by TV dashboards)
         case .rule where !state.args.isEmpty:
             switch state.args[0].uppercased() {
             case "ADD":

@@ -1,4 +1,4 @@
-"""Small in-memory TTL cache for blocking provider calls."""
+"""Small in-memory TTL cache for blocking provider calls (stale values cover provider errors)."""
 
 from __future__ import annotations
 
@@ -25,7 +25,13 @@ def ttl_cache(seconds: float, maxsize: int = 256) -> Callable[[Callable[P, R]], 
                 hit = store.get(key)
                 if hit and now - hit[0] < seconds:
                     return hit[1]
-            value = fn(*args, **kwargs)
+            try:
+                value = fn(*args, **kwargs)
+            except Exception:
+                # A provider hiccup (rate limit, timeout): serve the last good value for up to a day.
+                if hit and now - hit[0] < 86400:
+                    return hit[1]
+                raise
             with lock:
                 if len(store) >= maxsize:
                     store.pop(next(iter(store)))

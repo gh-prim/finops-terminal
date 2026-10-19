@@ -15,8 +15,15 @@ public struct TerminalView: View {
 
     public var body: some View {
         HStack(spacing: 0) {
-            SidebarView(model: model, client: model.client)
-                .frame(width: 270)
+            if model.sidebarCollapsed {
+                SidebarRail(model: model)
+                    .frame(width: 48)
+                    .transition(.move(edge: .leading))
+            } else {
+                SidebarView(model: model, client: model.client)
+                    .frame(width: 270)
+                    .transition(.move(edge: .leading))
+            }
             Divider().overlay(Palette.border)
             VStack(spacing: 0) {
                 toolbar
@@ -37,6 +44,12 @@ public struct TerminalView: View {
 
     private var toolbar: some View {
         HStack(spacing: 6) {
+            Button { withAnimation(.easeInOut(duration: 0.2)) { model.sidebarCollapsed.toggle() } } label: {
+                Image(systemName: "sidebar.left")
+            }
+            .buttonStyle(TerminalButtonStyle(selected: !model.sidebarCollapsed))
+            .help(model.sidebarCollapsed ? "Show the sidebar (⌘\\)" : "Collapse the sidebar to icons (⌘\\)")
+            .accessibilityLabel(model.sidebarCollapsed ? "Show sidebar" : "Collapse sidebar")
             SectionLabel(title: "Layout")
             ForEach(Layout.allCases, id: \.self) { layout in
                 Button { model.setLayout(layout) } label: { Image(systemName: layout.systemImage) }
@@ -185,6 +198,8 @@ public struct TerminalCommands: Commands {
         CommandMenu("Navigate") {
             Button("Back") { model?.back() }
                 .keyboardShortcut("[", modifiers: .command)
+            Button("Toggle Sidebar") { withAnimation(.easeInOut(duration: 0.2)) { model?.sidebarCollapsed.toggle() } }
+                .keyboardShortcut("\\", modifiers: .command)
                 .disabled(!(model?.activePanel.canGoBack ?? false))
             Button("Command Line") { focusCommandLine?() }
                 .keyboardShortcut("l", modifiers: .command)

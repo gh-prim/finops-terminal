@@ -60,6 +60,8 @@ public struct GatewayDocument: Decodable, Sendable {
     public let asOf: Double
     /// Live screens: seconds after which the view reloads itself.
     public let refresh: Double?
+    /// "map": the map block takes two thirds of the height, other blocks scroll below it.
+    public let layout: String?
 
     public enum Block: Decodable, Sendable, Identifiable {
         case table(TableBlock)

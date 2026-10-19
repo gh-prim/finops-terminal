@@ -44,6 +44,14 @@ struct PanelView: View {
                     .lineLimit(1)
                 Text(state.function.title).foregroundStyle(Palette.muted).lineLimit(1)
                 Spacer()
+                Button {
+                    let file = model.cases.pin(command: state.command,
+                                               title: "\(state.security.map { "\($0) · " } ?? "")\(state.function.title)")
+                    model.show(message: "Pinned to case \(file.name)")
+                } label: { Image(systemName: "pin") }
+                .buttonStyle(TerminalButtonStyle())
+                .help("Pin this screen to the current case (CASE PIN)")
+                .accessibilityLabel("Pin to case")
                 Button { panel.linked.toggle() } label: {
                     Image(systemName: panel.linked ? "link" : "link.badge.plus")
                 }
@@ -225,6 +233,14 @@ struct PanelView: View {
                                                                      "args": args.joined(separator: " ")], run: run)
         case .rule:
             RulesView(book: model.rules)
+        case .caseFile where state.args.first?.uppercased() == "FEED":
+            DocumentView(client: client, service: "case_feed", params: ["terms": args.dropFirst().joined(separator: " ")], run: run)
+        case .caseFile:
+            CasesView(model: model, client: client, run: run)
+        case .expo:
+            DocumentView(client: client, service: "exposure", params: [
+                "positions": model.positions.isEmpty || args.first == "WATCH" ? model.watchlist.joined(separator: ";") : positionsParam,
+            ], run: run)
         case .dash:
             DashboardBuilderView(model: model, client: model.client)
         case .read:

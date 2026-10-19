@@ -15,7 +15,7 @@ Sink = Callable[[str, dict[str, Any]], Awaitable[None]]  # (kind, payload)
 
 
 class Hub:
-    def __init__(self, poll_seconds: float = 5.0) -> None:
+    def __init__(self, poll_seconds: float = 15.0) -> None:  # Yahoo rate-limits per IP; Binance streams live
         self.poll_seconds = poll_seconds
         self._subscribers: dict[str, set[Sink]] = {}
         self._pollers: dict[str, asyncio.Task[None]] = {}

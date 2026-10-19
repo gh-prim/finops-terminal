@@ -58,6 +58,12 @@ public final class DashboardStore {
         return dashboard
     }
 
+    /// Insert or replace a whole dashboard (e.g. one generated from a case).
+    public func put(_ dashboard: Dashboard) {
+        if let i = dashboards.firstIndex(where: { $0.id == dashboard.id }) { dashboards[i] = dashboard } else { dashboards.append(dashboard) }
+        changed()
+    }
+
     public func duplicate(_ id: UUID) {
         guard var copy = dashboards.first(where: { $0.id == id }) else { return }
         copy.id = UUID()

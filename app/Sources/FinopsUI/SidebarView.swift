@@ -334,3 +334,44 @@ private struct NameSheet: View {
         dismiss()
     }
 }
+
+/// The collapsed sidebar: one icon per function (tooltip = name and command), the current
+/// one highlighted; the top button (or ⌘\\) brings the full sidebar back.
+struct SidebarRail: View {
+    let model: TerminalModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button { withAnimation(.easeInOut(duration: 0.2)) { model.sidebarCollapsed = false } } label: {
+                Image(systemName: "magnifyingglass").frame(width: 48, height: 40)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Palette.muted)
+            .help("Search and watchlist (⌘\\)")
+            Divider().overlay(Palette.border)
+            ScrollView {
+                VStack(spacing: 2) {
+                    ForEach(FunctionID.Group.allCases.filter { $0 != .security }, id: \.self) { group in
+                        ForEach(FunctionID.allCases.filter { $0.group == group }, id: \.self) { function in
+                            let selected = model.panel.function == function
+                            Button { model.open(function) } label: {
+                                Image(systemName: function.systemImage)
+                                    .font(.system(size: 14))
+                                    .frame(width: 34, height: 30)
+                                    .foregroundStyle(selected ? Palette.onAccent : Palette.muted)
+                                    .background(selected ? Palette.accent : .clear, in: RoundedRectangle(cornerRadius: 5))
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .help("\(function.title) — \(function.rawValue)")
+                            .accessibilityLabel(function.title)
+                        }
+                        Divider().overlay(Palette.border).padding(.vertical, 4).padding(.horizontal, 8)
+                    }
+                }
+                .padding(.vertical, 6)
+            }
+        }
+        .background(Palette.surface)
+    }
+}
