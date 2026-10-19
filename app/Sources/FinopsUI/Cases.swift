@@ -99,12 +99,17 @@ struct CasesView: View {
                 detail(file).id(file.id)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("No case yet").font(.headline)
-                    Text("Create one to follow a theme (e.g. “Taiwan, TSMC, chips”), keep notes, and pin screens with the 📌 button in any panel.")
-                        .foregroundStyle(Palette.muted)
-                    Button("New case") { book.create("Investigation") }
+                    HStack {
+                        Text("No case yet").font(.headline)
+                        Text("Follow a theme, keep notes, pin screens with 📌. Example below: “Taiwan, TSMC, chips”.")
+                            .foregroundStyle(Palette.muted)
+                        Spacer()
+                        Button("New case") { book.create("Investigation") }.buttonStyle(TerminalButtonStyle(selected: true))
+                    }
+                    .padding([.horizontal, .top], 14)
+                    // A live example feed instead of an empty page.
+                    DocumentView(client: client, service: "case_feed", params: ["terms": "Taiwan, TSMC, chips"], run: run)
                 }
-                .padding(14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }

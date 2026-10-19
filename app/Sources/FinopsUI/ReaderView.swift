@@ -105,6 +105,9 @@ struct ReaderView: View {
             if !link.isEmpty {
                 Text("“\(link)” is not a web link.").foregroundStyle(Palette.down)
             }
+            // The latest headlines, one click from the reader, instead of an empty page.
+            DocumentView(client: client, service: "news", params: ["query": "stock market"], run: run)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(14)
     }

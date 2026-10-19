@@ -84,10 +84,28 @@ public final class RuleBook {
 /// RULE: cross-source alerts — presets, live status per condition, and an editor.
 struct RulesView: View {
     let book: RuleBook
+    let client: DataClient
+    let run: (String) -> Void
     @State private var editing: String?
 
     var body: some View {
         HStack(spacing: 0) {
+            if book.rules.isEmpty && editing == nil {
+                // No rules yet: show live what the presets watch, instead of an empty page.
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("No rules yet: add one from the presets on the right. What they watch, live:")
+                        .font(.terminalSmall).foregroundStyle(Palette.muted).padding(.horizontal, 14).padding(.top, 10)
+                    DocumentView(client: client, service: "world", params: ["kind": "ALL"], run: run)
+                }
+            } else {
+                rulesList
+            }
+            Divider().overlay(Palette.border)
+            side.frame(width: 320)
+        }
+    }
+
+    private var rulesList: some View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
@@ -109,9 +127,6 @@ struct RulesView: View {
                 }
                 .padding(14)
             }
-            Divider().overlay(Palette.border)
-            side.frame(width: 320)
-        }
     }
 
     private func card(_ rule: WatchRule) -> some View {

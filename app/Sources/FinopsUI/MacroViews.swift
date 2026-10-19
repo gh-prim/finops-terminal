@@ -131,7 +131,7 @@ struct CurveView: View {
                     legend(data)
                     HStack(alignment: .top, spacing: 18) {
                         chart(data).frame(maxWidth: .infinity, maxHeight: .infinity)
-                        ScrollView { table(data, latest: latest) }.frame(width: min(420, geo.size.width * 0.34))
+                        table(data, latest: latest, height: geo.size.height - 70).frame(width: min(420, geo.size.width * 0.34))
                     }
                     .frame(maxHeight: .infinity)
                     Text("Constant-maturity yields, %. Source: \(data.source)").font(.terminalSmall).foregroundStyle(Palette.muted)
@@ -182,9 +182,12 @@ struct CurveView: View {
         .accessibilityLabel("Yield curve chart")
     }
 
-    private func table(_ data: YieldCurves, latest: YieldCurves.Curve) -> some View {
+    /// Rows spread over the chart's height so the table column has no black margin under it.
+    private func table(_ data: YieldCurves, latest: YieldCurves.Curve, height: CGFloat) -> some View {
         let yearAgo = data.curves.last
-        return Grid(alignment: .trailing, horizontalSpacing: 18, verticalSpacing: 4) {
+        let rows = CGFloat(latest.points.count + 1)
+        let spacing = min(max(4, (height - 20 - rows * 16) / rows), 40)
+        return Grid(alignment: .trailing, horizontalSpacing: 18, verticalSpacing: spacing) {
             GridRow {
                 Text("Tenor").gridColumnAlignment(.leading)
                 ForEach(data.curves) { Text($0.label) }
@@ -206,6 +209,7 @@ struct CurveView: View {
         }
         .font(.system(size: 12, design: .monospaced))
         .padding(10)
+        .frame(maxHeight: .infinity, alignment: .top)
         .background(Palette.surface, in: RoundedRectangle(cornerRadius: 4))
     }
 }

@@ -39,11 +39,15 @@ struct TVView: View {
                 Spacer()
                 Text("Source: YouTube (official embed)").font(.terminalSmall).foregroundStyle(Palette.muted)
             }
-            YouTubePlayer(embed: selection.embed)
-                .aspectRatio(16 / 9, contentMode: .fit)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.black)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+            // Sized from the space actually available, so the player never runs under the command bar.
+            GeometryReader { geo in
+                let width = min(geo.size.width, geo.size.height * 16 / 9)
+                YouTubePlayer(embed: selection.embed)
+                    .frame(width: width, height: width * 9 / 16)
+                    .background(Color.black)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
             Text("If the stream has moved to a new broadcast, pick “current live”. Type TV <video-id> for any other YouTube live.")
                 .font(.terminalSmall).foregroundStyle(Palette.muted)
         }

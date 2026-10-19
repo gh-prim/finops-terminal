@@ -1,3 +1,4 @@
+import Charts
 import FinopsCore
 import FinopsDash
 import SwiftUI
@@ -8,22 +9,21 @@ struct QuantView: View {
     @State private var tab: Tab = .tvm
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 4) {
-                    ForEach(Tab.allCases, id: \.self) { t in
-                        Button(t.rawValue) { tab = t }.buttonStyle(TerminalButtonStyle(selected: tab == t))
-                    }
-                }
-                switch tab {
-                case .tvm: TVMCalculator()
-                case .bond: BondCalculator()
-                case .option: OptionCalculator()
+        // No scroll: inputs on top, the calculator's chart takes the rest of the panel.
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 4) {
+                ForEach(Tab.allCases, id: \.self) { t in
+                    Button(t.rawValue) { tab = t }.buttonStyle(TerminalButtonStyle(selected: tab == t))
                 }
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            switch tab {
+            case .tvm: TVMCalculator()
+            case .bond: BondCalculator()
+            case .option: OptionCalculator()
+            }
         }
+        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
@@ -59,6 +59,22 @@ private func output(_ label: String, _ value: String, highlight: Bool = false) -
     .font(.system(size: 12, design: .monospaced))
 }
 
+/// The full-height chart under a calculator.
+@MainActor
+private func chartCard(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+        SectionLabel(title: title)
+        content()
+            .chartXAxis { AxisMarks { _ in AxisGridLine().foregroundStyle(Palette.border); AxisValueLabel().foregroundStyle(Palette.muted) } }
+            .chartYAxis { AxisMarks(position: .trailing) { _ in AxisGridLine().foregroundStyle(Palette.border); AxisValueLabel().foregroundStyle(Palette.muted) } }
+            .chartLegend(position: .top, alignment: .leading)
+    }
+    .padding(12)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(Palette.surface, in: RoundedRectangle(cornerRadius: 4))
+    .overlay(RoundedRectangle(cornerRadius: 4).stroke(Palette.border))
+}
+
 private func card(_ title: String, @ViewBuilder content: () -> some View) -> some View {
     VStack(alignment: .leading, spacing: 6) {
         SectionLabel(title: title)
@@ -80,6 +96,9 @@ private struct TVMCalculator: View {
     var body: some View {
         let r = rate / 100 / perYear, n = years * perYear
         let cfs = flows.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        let horizon = max(1, Int(years.rounded()))
+        let growth = (0...horizon).map { y in (y, Quant.futureValue(pv: pv, pmt: pmt, rate: r, n: Double(y) * perYear)) }
+        VStack(alignment: .leading, spacing: 14) {
         HStack(alignment: .top, spacing: 14) {
             card("Future value & payment") {
                 NumberField(label: "Present value", value: $pv)
@@ -108,6 +127,14 @@ private struct TVMCalculator: View {
                 output("IRR", Quant.irr(cashFlows: cfs).map { Format.number($0 * 100, digits: 4) + "%" } ?? "—")
             }
         }
+        chartCard("Value over time") {
+            Chart(growth, id: \.0) { y, value in
+                AreaMark(x: .value("Year", y), y: .value("Value", value))
+                    .foregroundStyle(LinearGradient(colors: [Palette.accent.opacity(0.3), .clear], startPoint: .top, endPoint: .bottom))
+                LineMark(x: .value("Year", y), y: .value("Value", value)).foregroundStyle(Palette.accent)
+            }
+        }
+        }
     }
 }
 
@@ -121,6 +148,10 @@ private struct BondCalculator: View {
 
     var body: some View {
         let b = Quant.bond(face: face, couponRate: coupon / 100, ytm: ytm / 100, years: years, frequency: max(Int(frequency), 1))
+        let curve = stride(from: max(0.1, ytm - 5), through: ytm + 5, by: 0.25).map { y in
+            (y, Quant.bond(face: face, couponRate: coupon / 100, ytm: y / 100, years: years, frequency: max(Int(frequency), 1)).price)
+        }
+        VStack(alignment: .leading, spacing: 14) {
         HStack(alignment: .top, spacing: 14) {
             card("Price from yield") {
                 NumberField(label: "Face value", value: $face)
@@ -144,6 +175,16 @@ private struct BondCalculator: View {
                     .map { Format.number($0 * 100, digits: 4) + "%" } ?? "—", highlight: true)
             }
         }
+        chartCard("Price vs yield (convexity)") {
+            Chart {
+                ForEach(curve, id: \.0) { y, p in
+                    LineMark(x: .value("Yield %", y), y: .value("Price", p)).foregroundStyle(Palette.accent)
+                }
+                PointMark(x: .value("Yield %", ytm), y: .value("Price", b.price)).foregroundStyle(.white).symbolSize(60)
+                RuleMark(x: .value("Yield %", ytm)).foregroundStyle(Palette.muted.opacity(0.5))
+            }
+        }
+        }
     }
 }
 
@@ -162,6 +203,14 @@ private struct OptionCalculator: View {
                                       volatility: args.vol, dividendYield: args.q)
         let put = Quant.blackScholes(call: false, spot: args.spot, strike: args.strike, years: args.years, rate: args.rate,
                                      volatility: args.vol, dividendYield: args.q)
+        let spots = stride(from: strike * 0.5, through: strike * 1.5, by: strike / 50).map { $0 }
+        let lines: [(String, Double, Double)] = spots.flatMap { x -> [(String, Double, Double)] in
+            let c = Quant.blackScholes(call: true, spot: x, strike: strike, years: t, rate: args.rate, volatility: args.vol, dividendYield: args.q)
+            let p = Quant.blackScholes(call: false, spot: x, strike: strike, years: t, rate: args.rate, volatility: args.vol, dividendYield: args.q)
+            return [("Call today", x, c.price), ("Put today", x, p.price),
+                    ("Call at expiry", x, max(x - strike, 0)), ("Put at expiry", x, max(strike - x, 0))]
+        }
+        VStack(alignment: .leading, spacing: 14) {
         HStack(alignment: .top, spacing: 14) {
             card("Black–Scholes–Merton inputs") {
                 NumberField(label: "Spot", value: $spot)
@@ -188,6 +237,19 @@ private struct OptionCalculator: View {
                 .font(.system(size: 12, design: .monospaced))
                 .monospacedDigit()
             }
+        }
+        chartCard("Value vs spot · today and at expiry") {
+            Chart {
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, l in
+                    LineMark(x: .value("Spot", l.1), y: .value("Value", l.2), series: .value("Line", l.0))
+                        .foregroundStyle(by: .value("Line", l.0))
+                        .lineStyle(StrokeStyle(lineWidth: l.0.contains("expiry") ? 1 : 2, dash: l.0.contains("expiry") ? [4, 3] : []))
+                }
+                RuleMark(x: .value("Spot", spot)).foregroundStyle(.white.opacity(0.5))
+            }
+            .chartForegroundStyleScale(["Call today": Heat.up, "Put today": Heat.down,
+                                        "Call at expiry": Heat.up.opacity(0.5), "Put at expiry": Heat.down.opacity(0.5)])
+        }
         }
     }
 

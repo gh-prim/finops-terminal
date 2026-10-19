@@ -157,9 +157,19 @@ private struct ViewportHeightKey: EnvironmentKey {
     static let defaultValue: CGFloat = 0
 }
 
+/// Height budget of one tile in a document's grid of small blocks (0 = not in a sized grid):
+/// tiles share the window height so short tables and charts stretch instead of leaving black.
+private struct TileHeightKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
 public extension EnvironmentValues {
     var viewportHeight: CGFloat {
         get { self[ViewportHeightKey.self] }
         set { self[ViewportHeightKey.self] = newValue }
+    }
+    var tileHeight: CGFloat {
+        get { self[TileHeightKey.self] }
+        set { self[TileHeightKey.self] = newValue }
     }
 }

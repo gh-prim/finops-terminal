@@ -64,7 +64,7 @@ def resolve_list(raw: str) -> list[tuple[str, str]]:
     out = []
     for item in [s.strip() for s in raw.replace(",", ";").split(";") if s.strip()]:
         try:
-            out.append((item.upper(), securities.resolve(item).symbol))
+            out.append((item.upper(), securities.resolve(item).yahoo_symbol))
         except ValueError:
             continue
     return out
@@ -377,7 +377,7 @@ def portfolio(positions: str) -> dict[str, Any]:
     for part in [p for p in positions.split(";") if "|" in p]:
         typed, qty = part.rsplit("|", 1)
         try:
-            holdings.append((typed.strip().upper(), securities.resolve(typed).symbol, float(qty)))
+            holdings.append((typed.strip().upper(), securities.resolve(typed).yahoo_symbol, float(qty)))
         except ValueError:
             continue
     if not holdings:

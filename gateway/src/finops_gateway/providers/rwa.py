@@ -87,40 +87,42 @@ def _binance_rows() -> list[dict[str, Any]]:
         if not t:
             continue
         f = binance._f
-        rows.append(row([base, what, f(t["lastPrice"]), f(t["priceChangePercent"]), f(t["highPrice"]), f(t["lowPrice"]),
-                         f(t["quoteVolume"])], cmd=f"{base} CRYPTO CHART"))
+        rows.append(row([base, f(t["lastPrice"]), f(t["priceChangePercent"]), f(t["quoteVolume"])],
+                        cmd=f"{base} CRYPTO CHART"))
     return rows
 
 
 def overview() -> dict[str, Any]:
+    """Split layout: the market by category as a treemap on the left, figures and live tokens on the right."""
     try:
         cats = categories()
     except Exception:
         cats = {}
     sizes = [(key, label, cats[cat_id].get("market_cap") or 0, cats[cat_id].get("market_cap_change_24h"))
              for key, (cat_id, label) in CATEGORIES.items() if cat_id in cats and cats[cat_id].get("market_cap")]
-    total = (cats.get("real-world-assets-rwa") or {}).get("market_cap")
+    rwa_all = cats.get("real-world-assets-rwa") or {}
     gold = _gold_future()
     tickers = {t["symbol"]: t for t in binance._tickers()}
     premium = []
     for base in ("PAXG", "XAUT"):
         if (t := tickers.get(f"{base}USDT")) and gold:
             price = binance._f(t["lastPrice"])
-            premium.append((f"{base} vs COMEX gold", (price / gold - 1) * 100 if price else None, "pctchange"))
+            premium.append((f"{base} vs COMEX", (price / gold - 1) * 100 if price else None, "pctchange"))
     return document("Real-world assets", [
+        treemap("market", "Tokenized market by category · area = market cap · colour = 24h · click to open", [
+            {"label": "Categories", "items": [
+                {"label": label.replace("Tokenized ", "").capitalize(), "detail": f"{cap / 1e9:.1f} B$",
+                 "weight": cap, "value": change, "cmd": f"RWA {key}"} for key, label, cap, change in sizes]}]),
         _tabs("OVERVIEW"),
-        kv("Tokenized market (CoinGecko)", [("All RWA tokens", total, "compact")]
-           + [(label, cap, "compact") for _, label, cap, _ in sizes]),
-        kv("24h change", [(label, change, "pctchange") for _, label, _, change in sizes]),
-        kv("Gold tokens", [("COMEX gold (front month)", gold, "price"), *premium]),
-        donut("split", "Market cap by category", [{"label": label, "value": cap / sum(s[2] for s in sizes) * 100}
-                                                  for _, label, cap, _ in sizes] if sizes else []),
+        kv("Market", [("All RWA tokens", rwa_all.get("market_cap"), "compact"),
+                      ("24h", rwa_all.get("market_cap_change_24h"), "pctchange"),
+                      ("COMEX gold", gold, "price"), *premium]),
         table("live", "Live on Binance · click for the streaming chart", [
-            column("sym", "Token"), column("what", "What it is"), column("last", "Last", "price"), column("chg", "24h", "pctchange"),
-            column("hi", "24h high", "price"), column("lo", "24h low", "price"), column("vol", "Volume USDT", "compact"),
+            column("sym", "Token"), column("last", "Last", "price"), column("chg", "24h", "pctchange"),
+            column("vol", "Vol USDT", "compact"),
         ], _binance_rows()),
-    ], SOURCE, notes=["Gold tokens trade around the clock; COMEX gold is a futures price (contango makes it slightly higher).",
-                      "Pick a category above for its tokens (stocks show their premium to the real share)."], refresh=15)
+    ], SOURCE, notes=["Gold tokens trade around the clock; COMEX gold is a futures price (contango makes it slightly higher)."],
+        refresh=15, layout="split")
 
 
 def _tabs(selected: str) -> dict[str, Any]:
@@ -156,29 +158,29 @@ def category_screen(key: str) -> dict[str, Any]:
     for c in coins:
         sym = (c.get("symbol") or "").upper()
         price = c.get("current_price")
-        cells = [sym, c.get("name"), price, c.get("price_change_percentage_24h"),
-                 c.get("price_change_percentage_7d_in_currency"), c.get("market_cap"), c.get("total_volume")]
+        cells = [sym, price, c.get("price_change_percentage_24h"), c.get("market_cap")]
         if stock:
             u = _underlying(sym, c.get("name") or "")
             ref = underlying_prices.get(u) if u else None
-            cells += [u, ref, (price / ref - 1) * 100 if price and ref else None]
+            cells += [(price / ref - 1) * 100 if price and ref else None]
         cmd = f"{sym} CRYPTO CHART" if sym in binance_bases else (f"{_underlying(sym, '')} US EQ CHART" if stock and _underlying(sym, '') else None)
         rows.append(row(cells, cmd=cmd, url=None if cmd else f"https://www.coingecko.com/en/coins/{c.get('id')}"))
-    columns = [column("sym", "Token"), column("name", "Name"), column("px", "Price", "price"), column("d1", "24h", "pctchange"),
-               column("d7", "7d", "pctchange"), column("cap", "Market cap", "compact"), column("vol", "Volume 24h", "compact")]
+    columns = [column("sym", "Token"), column("px", "Price", "price"), column("d1", "24h", "pctchange"),
+               column("cap", "Mkt cap", "compact")]
     if stock:
-        columns += [column("u", "Share"), column("upx", "Share price", "price"), column("prem", "Premium", "pctchange")]
+        columns += [column("prem", "vs share", "pctchange")]
     total = sum(c.get("market_cap") or 0 for c in coins)
     return document(label, [
+        treemap("caps", "Market cap · colour = 24h change · click to open", [{"label": label, "items": [
+            {"label": (c.get("symbol") or "").upper(), "detail": c.get("name"), "weight": c.get("market_cap") or 0,
+             "value": c.get("price_change_percentage_24h"), "cmd": cmd}
+            for c, cmd in zip(coins[:40], [r.get("cmd") for r in rows[:40]]) if c.get("market_cap")]}]),
         _tabs(key),
         kv("Category", [("Market cap (listed)", total, "compact"), ("Tokens", len(coins), "int"),
                         ("Largest", (coins[0].get("name") if coins else None), "text")]),
-        treemap("caps", "Market cap · colour = 24h change", [{"label": label, "items": [
-            {"label": (c.get("symbol") or "").upper(), "detail": c.get("name"), "weight": c.get("market_cap") or 0,
-             "value": c.get("price_change_percentage_24h")} for c in coins[:30] if c.get("market_cap")]}]),
-        table("tokens", f"{label} by market cap", columns, rows),
-    ], SOURCE, notes=(["Premium = token price vs the share's last price (Yahoo). On weekends the token keeps trading: "
-                       "the premium is the market's guess for Monday's open."] if stock else []), refresh=300)
+        table("tokens", f"Top {min(len(rows), 18)} by market cap", columns, rows[:18]),
+    ], SOURCE, notes=(["vs share = token price vs the real share (Yahoo); on weekends it is the market's guess for Monday."]
+                      if stock else []), refresh=300, layout="split")
 
 
 def rwa(kind: str = "OVERVIEW") -> dict[str, Any]:

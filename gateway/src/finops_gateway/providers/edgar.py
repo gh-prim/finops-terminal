@@ -14,7 +14,7 @@ from typing import Any
 
 from ..cache import ttl_cache
 from ..config import settings
-from ..documents import choices, column, document, row, table
+from ..documents import choices, column, document, row, series as series_block, table
 from .http import get_json
 
 SOURCE = "SEC EDGAR (XBRL company facts)"
@@ -247,6 +247,18 @@ def financials(symbol: str, period: str = "A", statement: str = "IS") -> dict[st
         if any(v is not None for v in values):
             rows.append({**row([label, *values]), "kind": kind})  # row-level format override
 
+    # Charts of the main lines and the derived ratios, oldest to newest.
+    def epoch(e: dt.date) -> int:
+        return int(dt.datetime(e.year, e.month, e.day, tzinfo=dt.timezone.utc).timestamp())
+
+    amounts = [r for r in rows if r.get("kind", "compact") == "compact"][:4]
+    ratios = [r for r in rows if r.get("kind") in ("percent", "pctchange")]
+    charts = [series_block("lines", "Main lines", [{"label": r["cells"][0], "points": list(zip(map(epoch, ends), r["cells"][1:]))}
+                                                   for r in amounts], kind="compact")] if amounts else []
+    if ratios:
+        charts.append(series_block("ratios", "Margins and growth %", [{"label": r["cells"][0],
+                                   "points": list(zip(map(epoch, ends), r["cells"][1:]))} for r in ratios], kind="percent"))
+
     # Newest period first so the latest numbers are visible without scrolling.
     columns = [columns[0], *reversed(columns[1:])]
     for r in rows:
@@ -257,6 +269,7 @@ def financials(symbol: str, period: str = "A", statement: str = "IS") -> dict[st
         choices("statement", None, [(STATEMENTS[k][0], f"FIN {period} {k}") for k in STATEMENTS], title),
         choices("period", None, [("Annual", f"FIN A {statement}"), ("Quarterly", f"FIN Q {statement}")], period_name),
         table("statement", f"{period_name} · USD", columns, rows),
+        *charts,
     ], SOURCE, subtitle=symbol, notes=[
         "Values as reported in 10-K/10-Q XBRL. Quarterly values are derived from year-to-date filings where needed.",
     ])

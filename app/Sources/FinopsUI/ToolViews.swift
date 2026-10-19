@@ -107,13 +107,15 @@ struct PortfolioView: View {
 struct AlertsView: View {
     let model: TerminalModel
     let defaultSecurity: String?
+    let client: DataClient
+    let run: (String) -> Void
 
     @State private var security = ""
     @State private var above = true
     @State private var price = ""
 
     var body: some View {
-        ScrollView {
+        VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Price alerts").font(.system(size: 14, weight: .semibold, design: .monospaced))
                 HStack(spacing: 6) {
@@ -167,10 +169,53 @@ struct AlertsView: View {
                     .padding(10)
                     .background(Palette.surface, in: RoundedRectangle(cornerRadius: 4))
                 }
+                quickAlerts
             }
             .padding(14)
+            Divider().overlay(Palette.border)
+            // The watchlist's last month under the alerts, so the page is useful all the way down.
+            DocumentView(client: client, service: "grid",
+                         params: ["securities": model.watchlist.joined(separator: ";"), "range": "1M"], run: run)
         }
-        .onAppear { if security.isEmpty { security = defaultSecurity ?? "" } }
+        .onAppear {
+            if security.isEmpty { security = defaultSecurity ?? "" }
+            model.quotes.track(Set(model.watchlist), for: "alerts-watchlist")
+        }
+    }
+
+    /// The watchlist with one-click alerts a few percent away from the last price.
+    private var quickAlerts: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("QUICK ALERTS · WATCHLIST").font(.terminalLabel).tracking(1).foregroundStyle(Palette.accent)
+            Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 8) {
+                GridRow {
+                    Text("Security"); Text("Last"); Text("Change"); Text("Alert at")
+                }
+                .font(.terminalLabel).foregroundStyle(Palette.muted)
+                ForEach(model.watchlist, id: \.self) { typed in
+                    let quote = model.quotes.quotes[typed]
+                    GridRow {
+                        Button(typed) { security = typed }.buttonStyle(.plain).foregroundStyle(Palette.accent)
+                        Text(Format.price(quote?.last)).monospacedDigit()
+                        Text(Format.percent(quote?.changePct)).foregroundStyle(Palette.direction(quote?.changePct)).monospacedDigit()
+                        HStack(spacing: 6) {
+                            ForEach([-5.0, -2.0, 2.0, 5.0], id: \.self) { pct in
+                                Button(pct > 0 ? "+\(Int(pct))%" : "\(Int(pct))%") {
+                                    guard let last = quote?.last else { return }
+                                    model.addAlert(security: typed, above: pct > 0, price: last * (1 + pct / 100))
+                                }
+                                .buttonStyle(TerminalButtonStyle())
+                                .disabled(quote?.last == nil)
+                            }
+                        }
+                    }
+                }
+            }
+            .font(.system(size: 12, design: .monospaced))
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Palette.surface, in: RoundedRectangle(cornerRadius: 4))
     }
 }
 

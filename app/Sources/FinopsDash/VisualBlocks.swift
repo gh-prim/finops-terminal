@@ -183,11 +183,13 @@ public struct MatrixBlockView: View {
     let block: GatewayDocument.MatrixBlock
     let run: (String) -> Void
     @Environment(\.viewportHeight) private var viewport
+    @Environment(\.tileHeight) private var tile
 
-    /// Taller cells on a big window (up to 46 pt) so a matrix isn't a thin strip at the top.
+    /// Cells share the tile or window height (up to 90 pt) so a matrix isn't a thin strip at the top.
     private var cellHeight: CGFloat {
+        if tile > 0, !block.rows.isEmpty { return min(max(24, (tile - 40) / CGFloat(block.rows.count + 1)), 90) }
         guard viewport > 0, !block.rows.isEmpty else { return 24 }
-        return min(max(24, (viewport - 230) / CGFloat(block.rows.count + 1)), 46)
+        return min(max(24, (viewport - 210) / CGFloat(block.rows.count + 1)), 90)
     }
     public init(block: GatewayDocument.MatrixBlock, run: @escaping (String) -> Void) {
         self.block = block
@@ -422,6 +424,16 @@ public struct GraphBlockView: View {
 public struct BarsBlockView: View {
     let block: GatewayDocument.BarsBlock
     let run: (String) -> Void
+    @Environment(\.viewportHeight) private var viewport
+    @Environment(\.tileHeight) private var tile
+
+    /// Rows share the tile (or window) height, 18–48 pt, so a short list doesn't leave the panel half empty.
+    private var rowHeight: CGFloat {
+        guard !block.items.isEmpty else { return 18 }
+        if tile > 0 { return min(max(18, (tile - 30) / CGFloat(block.items.count) - 4), 80) }
+        guard viewport > 0 else { return 18 }
+        return min(max(18, (viewport - 230) / CGFloat(block.items.count) - 4), 48)
+    }
     public init(block: GatewayDocument.BarsBlock, run: @escaping (String) -> Void) {
         self.block = block
         self.run = run
@@ -435,7 +447,7 @@ public struct BarsBlockView: View {
             blockTitle(block.title)
             ForEach(Array(block.items.enumerated()), id: \.offset) { _, item in
                 HStack(spacing: 8) {
-                    Text(item.label).lineLimit(1).frame(width: 220, alignment: .leading)
+                    Text(item.label).lineLimit(1).frame(minWidth: 90, idealWidth: 170, maxWidth: 170, alignment: .leading)
                         .foregroundStyle(item.cmd != nil ? Palette.accent : Palette.text)
                     GeometryReader { geo in
                         let half = hasNegative ? geo.size.width / 2 : 0
@@ -445,7 +457,7 @@ public struct BarsBlockView: View {
                             .frame(width: max(length, 1), height: 12)
                             .offset(x: item.value >= 0 ? half : half - length, y: (geo.size.height - 12) / 2)
                     }
-                    .frame(height: 18)
+                    .frame(height: rowHeight)
                     Text(Format.value(.number(item.value), kind: block.kind)).monospacedDigit().frame(width: 90, alignment: .trailing)
                 }
                 .font(.system(size: 12, design: .monospaced))
@@ -459,6 +471,7 @@ public struct BarsBlockView: View {
 public struct SeriesBlockView: View {
     let block: GatewayDocument.SeriesBlock
     @Environment(\.viewportHeight) private var viewport
+    @Environment(\.tileHeight) private var tile
     public init(block: GatewayDocument.SeriesBlock) {
         self.block = block
     }
@@ -503,7 +516,7 @@ public struct SeriesBlockView: View {
                     AxisValueLabel { Text(v.as(Double.self).map { Format.value(.number($0), kind: block.kind) } ?? "") }
                 }
             }
-            .frame(height: max(240, viewport * 0.4))
+            .frame(height: tile > 0 ? max(180, tile - 50) : max(240, viewport * 0.4))
         }
     }
 }
@@ -548,7 +561,7 @@ public struct SparkGridBlockView: View {
     private var sparkHeight: CGFloat {
         guard viewport > 0 else { return 90 }
         let rows = CGFloat((block.items.count + 5) / 6)
-        return min(max(90, (viewport - 180) / max(rows, 1) - 70), 260)
+        return min(max(90, (viewport - 150) / max(rows, 1) - 52), 420)
     }
     public init(block: GatewayDocument.SparkGridBlock, run: @escaping (String) -> Void) {
         self.block = block

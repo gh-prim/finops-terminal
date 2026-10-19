@@ -188,7 +188,14 @@ struct PanelView: View {
         case .port:
             VStack(spacing: 0) {
                 portfolioTabs(risk: false)
-                PortfolioView(model: model, run: run)
+                if model.positions.isEmpty {
+                    // No positions yet: the add form, then the watchlist's performance instead of a black page.
+                    PortfolioView(model: model, run: run).frame(height: 150)
+                    Divider().overlay(Palette.border)
+                    DocumentView(client: client, service: "perf", params: ["securities": watchlistParam([])], run: run)
+                } else {
+                    PortfolioView(model: model, run: run)
+                }
             }
         case .rv:
             DocumentView(client: client, service: "rv", params: ["security": security, "x": args.first ?? "FPE",
@@ -232,7 +239,7 @@ struct PanelView: View {
             DocumentView(client: client, service: "study", params: ["security": security.isEmpty ? "SPX IDX" : security,
                                                                      "args": args.joined(separator: " ")], run: run)
         case .rule:
-            RulesView(book: model.rules)
+            RulesView(book: model.rules, client: client, run: run)
         case .caseFile where state.args.first?.uppercased() == "FEED":
             DocumentView(client: client, service: "case_feed", params: ["terms": args.dropFirst().joined(separator: " ")], run: run)
         case .caseFile:
@@ -262,7 +269,7 @@ struct PanelView: View {
                 "region": args.first { !["ECO", "EARN", "TODAY", "WEEK", "2WEEKS"].contains($0) } ?? "MAJOR",
             ], run: run)
         case .alert:
-            AlertsView(model: model, defaultSecurity: state.security)
+            AlertsView(model: model, defaultSecurity: state.security, client: client, run: run)
         case .help:
             HelpView(run: run)
         }

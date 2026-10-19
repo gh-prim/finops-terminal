@@ -136,4 +136,4 @@ def exposure(positions_raw: str) -> dict[str, Any]:
                                                              column("ev", "Event")], risk_rows),
         table("exposure", "Exposure detail", [column("ent", "Entity"), column("w", "Weight", "percent"), column("k", "Type"),
                                               column("h", "Through"), column("n", "Events"), column("top", "Most notable")], rows),
-    ], SOURCE, notes=notes, refresh=300)
+    ], SOURCE, notes=notes, refresh=300, layout="map")

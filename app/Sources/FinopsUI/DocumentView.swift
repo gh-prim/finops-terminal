@@ -18,6 +18,11 @@ struct DocumentView: View {
 
     @State private var document: GatewayDocument?
     @State private var failure: String?
+    @State private var viewport: CGFloat = 0
+    @State private var contentWidth: CGFloat = 0
+    /// Measured heights: the whole page, and each block that stretches to fill it (by group id).
+    @State private var contentHeight: CGFloat = 0
+    @State private var flexHeights: [String: CGFloat] = [:]
 
     var body: some View {
         SwiftUI.Group {
@@ -58,13 +63,23 @@ struct DocumentView: View {
                                 .font(.terminalSmall).foregroundStyle(Palette.muted)
                         }
                         ForEach(rest) { block in
-                            if case .choices(let c) = block { WrappingChoices(block: c, run: run) } else { blockView(block) }
+                            if case .choices(let c) = block {
+                                WrappingChoices(block: c, run: run)
+                            } else if case .table = block {
+                                // Tables share what the column has left, so it has no black margin.
+                                blockView(block)
+                                    .environment(\.tileHeight, columnTableHeight(rest, height: geo.size.height))
+                                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { flexHeights[block.id] = $0 }
+                            } else {
+                                blockView(block)
+                            }
                         }
                         ForEach(document.notes, id: \.self) { Text($0).font(.terminalSmall).foregroundStyle(Palette.muted) }
                         Text("Source: \(document.source)").font(.terminalSmall).foregroundStyle(Palette.muted)
                     }
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
                 }
                 .frame(width: geo.size.width / 3)
             }
@@ -93,7 +108,10 @@ struct DocumentView: View {
 
     private var scrolling: some View {
         GeometryReader { geo in
-            scrollingContent.environment(\.viewportHeight, geo.size.height)
+            scrollingContent
+                .environment(\.viewportHeight, geo.size.height)
+                .onAppear { viewport = geo.size.height; contentWidth = geo.size.width - 28 }
+                .onChange(of: geo.size) { _, size in viewport = size.height; contentWidth = size.width - 28 }
         }
     }
 
@@ -110,7 +128,15 @@ struct DocumentView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
         }
+    }
+
+    /// Window height left for the stretching blocks: measured, not guessed (everything on the
+    /// page that isn't a stretching block keeps its natural height).
+    private var flexBudget: CGFloat? {
+        guard viewport > 0, contentHeight > 0, !flexHeights.isEmpty else { return nil }
+        return viewport - (contentHeight - flexHeights.values.reduce(0, +))
     }
 
     @ViewBuilder
@@ -132,13 +158,21 @@ struct DocumentView: View {
                     ForEach(cards, id: \.title) { KVCard(block: $0) }
                 }
             case .flow(let blocks):
-                // Small blocks side by side: as many columns as the width allows, no wasted black.
+                // Small blocks side by side: as many columns as the width allows, and the tiles share
+                // the window height so the page is filled without scrolling or black margins.
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 430), spacing: 18, alignment: .top)],
                           alignment: .leading, spacing: 18) {
                     ForEach(blocks) { blockView($0) }
                 }
+                .environment(\.tileHeight, tileHeight(document))
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { flexHeights[group.id] = $0 }
             case .block(let block):
-                blockView(block)
+                if case .table = block, loneTableHeight(document) > 0 {
+                    blockView(block).environment(\.tileHeight, loneTableHeight(document))
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { flexHeights[group.id] = $0 }
+                } else {
+                    blockView(block)
+                }
             }
         }
 
@@ -181,10 +215,70 @@ struct DocumentView: View {
         }
     }
 
+    /// Height budget of one grid tile: the window height left after the other groups, split over
+    /// the grid rows of every flow group. 0 (no stretching) when a full-width block also needs room.
+    private func tileHeight(_ document: GatewayDocument) -> CGFloat {
+        guard viewport > 0, contentWidth > 0 else { return 0 }
+        let groups = groupedBlocks(document.blocks)
+        let columns = max(1, Int((contentWidth + 18) / (430 + 18)))
+        var gridRows = 0
+        var overhead: CGFloat = 70 + CGFloat(document.notes.count) * 18
+        for group in groups {
+            switch group {
+            case .flow(let blocks): gridRows += (blocks.count + columns - 1) / columns
+            case .cards(let cards): overhead += 40 + CGFloat(cards.map(\.items.count).max() ?? 0) * 19
+            case .block(let block):
+                switch block {
+                case .choices: overhead += 40
+                case .text: overhead += 90
+                default: return 0
+                }
+            }
+        }
+        guard gridRows > 0 else { return 0 }
+        let flows = groups.filter { if case .flow = $0 { true } else { false } }.count
+        if let budget = flexBudget {
+            return max(0, (budget - CGFloat(gridRows - flows) * 18) / CGFloat(gridRows))
+        }
+        return max(0, (viewport - 28 - overhead) / CGFloat(gridRows) - 18)
+    }
+
+    /// A page whose only big block is one table (calendars, lists): the table gets the window
+    /// height left after the header, choices and cards, so its rows fill the page.
+    private func loneTableHeight(_ document: GatewayDocument) -> CGFloat {
+        guard viewport > 0 else { return 0 }
+        var overhead: CGFloat = 70 + CGFloat(document.notes.count) * 18
+        var tables = 0
+        for group in groupedBlocks(document.blocks) {
+            switch group {
+            case .flow: return 0
+            case .cards(let cards): overhead += 40 + CGFloat(cards.map(\.items.count).max() ?? 0) * 19
+            case .block(let block):
+                switch block {
+                case .choices: overhead += 40
+                case .text: overhead += 90
+                case .table: tables += 1
+                default: return 0
+                }
+            }
+        }
+        guard tables == 1 else { return 0 }
+        return max(0, flexBudget ?? (viewport - 28 - overhead - 18))
+    }
+
+    /// Split layouts: the right column's height left after its fixed blocks, shared by its tables.
+    private func columnTableHeight(_ blocks: [GatewayDocument.Block], height: CGFloat) -> CGFloat {
+        let tables = blocks.filter { if case .table = $0 { true } else { false } }
+        guard !tables.isEmpty, contentHeight > 0 else { return 0 }
+        let flex = tables.reduce(0) { $0 + (flexHeights[$1.id] ?? 0) }
+        let budget = height - (contentHeight - flex) - CGFloat(tables.count - 1) * 14
+        return max(0, budget / CGFloat(tables.count))
+    }
+
     /// Fits in a column next to others: short, narrow tables and small charts.
     private static func isCompact(_ block: GatewayDocument.Block) -> Bool {
         switch block {
-        case .table(let t): t.rows.count <= 30 && t.columns.count <= 9
+        case .table(let t): t.rows.count <= 60 && t.columns.count <= 9
         case .bars, .donut, .series: true
         case .matrix(let m): m.cols.count <= 10
         default: false
@@ -296,6 +390,19 @@ struct TableBlockView: View {
     @State private var ascending = false
     @State private var available: CGFloat = 0
     @Environment(\.viewportHeight) private var viewport
+    @Environment(\.tileHeight) private var tile
+
+    /// In a sized grid tile, rows spread over the tile (22–64 pt); else the standard 22 pt.
+    private var rowHeight: CGFloat {
+        guard tile > 0, !table.rows.isEmpty else { return Self.rowHeight }
+        return min(max(Self.rowHeight, (tile - 56) / CGFloat(table.rows.count)), 64).rounded(.down)
+    }
+
+    private var bodyHeight: CGFloat {
+        let natural = CGFloat(table.rows.count) * rowHeight
+        if tile > 0 { return min(natural, max(tile - 56, 3 * Self.rowHeight)) }
+        return min(natural, viewport > 0 ? max(Self.maxBodyHeight, viewport - 170) : Self.maxBodyHeight)
+    }
 
     private static let charWidth: CGFloat = 7.4
     static let rowHeight: CGFloat = 22
@@ -344,12 +451,11 @@ struct TableBlockView: View {
                     ScrollView(.vertical) {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             ForEach(rows) { row in
-                                TableRowView(row: row, widths: widths, striped: row.id.isMultiple(of: 2)) { activate(row.row) }
+                                TableRowView(row: row, widths: widths, height: rowHeight, striped: row.id.isMultiple(of: 2)) { activate(row.row) }
                             }
                         }
                     }
-                    .frame(height: min(CGFloat(rows.count) * Self.rowHeight,
-                                       viewport > 0 ? max(Self.maxBodyHeight, viewport - 170) : Self.maxBodyHeight))
+                    .frame(height: bodyHeight)
                 }
             }
         }
@@ -493,6 +599,7 @@ struct TableBlockView: View {
 private struct TableRowView: View {
     let row: TableBlockView.PreparedRow
     let widths: [CGFloat]
+    let height: CGFloat
     let striped: Bool
     let activate: () -> Void
     @State private var hovering = false
@@ -510,7 +617,7 @@ private struct TableRowView: View {
             }
         }
         .font(.system(size: 12, design: .monospaced))
-        .frame(height: TableBlockView.rowHeight)
+        .frame(height: height)
         .background(hovering && row.clickable ? Palette.raised : (striped ? .clear : Palette.surface.opacity(0.5)))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }

@@ -13,7 +13,7 @@ import pandas as pd
 import yfinance as yf
 
 from ..cache import ttl_cache
-from ..documents import cell, choices, column, document, kv, row, table, text
+from ..documents import cell, choices, column, document, kv, row, series, table, text
 from .yahoo import _retry_locked
 
 SOURCE = "Yahoo Finance via yfinance (unofficial, may be delayed)"
@@ -88,6 +88,13 @@ def profile(symbol: str) -> dict[str, Any]:
     ]
     if summary := info.get("longBusinessSummary"):
         blocks.insert(0, text("Business", summary))
+    try:
+        closes = yf.Ticker(symbol).history(period="5y", interval="1wk")["Close"].dropna()
+        blocks.append(series("price", f"Price · 5 years ({info.get('currency') or ''})".replace(" ()", ""),
+                             [{"label": symbol, "points": [(int(t.timestamp()), float(c)) for t, c in closes.items()]}],
+                             kind="price"))
+    except Exception:
+        pass  # the profile stands on its own
     return document(name, blocks, SOURCE, subtitle=symbol)
 
 
