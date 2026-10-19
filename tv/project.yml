@@ -40,6 +40,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.finops.tv
         TARGETED_DEVICE_FAMILY: "3"
+        ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         CODE_SIGN_STYLE: Automatic
