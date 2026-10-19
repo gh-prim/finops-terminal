@@ -66,6 +66,7 @@ public enum DashBlocks {
         case .series(let b): b.title ?? "Series"
         case .donut(let b): b.title ?? "Donut"
         case .sparkgrid(let b): b.title ?? "Small charts"
+        case .map(let b): b.title ?? "Map"
         case .text(let b): b.title ?? "Text"
         case .choices: "Choices"
         case .unknown: "Unknown"
@@ -111,6 +112,7 @@ struct DashBlockView: View {
         case .series(let b): SeriesBlockView(block: b)
         case .donut(let b): DonutBlockView(block: b)
         case .sparkgrid(let b): SparkGridBlockView(block: b, run: { _ in })
+        case .map(let b): MapBlockView(block: b, run: { _ in }, height: nil)
         default: EmptyView()
         }
     }

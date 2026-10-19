@@ -211,6 +211,8 @@ public struct ChartConfig: Equatable, Sendable {
     public var overlays: [Overlay] = []
     public var studies: [Study] = []
     public var compare: [String] = []
+    /// Event markers (news, earnings, macro, world) on the price pane; on unless NOEVT.
+    public var events = true
 
     public init() {}
 
@@ -222,6 +224,8 @@ public struct ChartConfig: Equatable, Sendable {
             else if let iv = Interval(rawValue: token) { interval = iv }
             else if let s = Style(rawValue: token) { style = s }
             else if token == "VOL" { volume = true }
+            else if token == "NOEVT" { events = false }
+            else if token == "EVT" { events = true }
             else if let o = Overlay(rawValue: token), !overlays.contains(o) { overlays.append(o) }
             else if let s = Study(rawValue: token), !studies.contains(s) { studies.append(s) }
             else if token == "VS", i + 1 < args.count {
@@ -239,7 +243,7 @@ public struct ChartConfig: Equatable, Sendable {
         for token in args {
             if skipNext { skipNext = false; continue }
             if token == "VS" { skipNext = true; continue }
-            if ChartRange(rawValue: token) == nil, Interval(rawValue: token) == nil, Style(rawValue: token) == nil, token != "VOL",
+            if ChartRange(rawValue: token) == nil, Interval(rawValue: token) == nil, Style(rawValue: token) == nil, token != "VOL", token != "NOEVT", token != "EVT",
                Overlay(rawValue: token) == nil, Study(rawValue: token) == nil {
                 unknown.append(token)
             }
@@ -252,6 +256,7 @@ public struct ChartConfig: Equatable, Sendable {
         if let interval { out.append(interval.rawValue) }
         if style != .line { out.append(style.rawValue) }
         if volume { out.append("VOL") }
+        if !events { out.append("NOEVT") }
         out += overlays.map(\.rawValue)
         out += studies.map(\.rawValue)
         if !compare.isEmpty { out += ["VS", compare.joined(separator: ",")] }

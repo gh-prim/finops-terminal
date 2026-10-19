@@ -32,6 +32,8 @@ from .providers import article, binance, crypto_news, edgar, fred, yahoo
 from .providers import yahoo_research as research
 from .providers import views
 from .providers.http import HTTPError
+from .intel import markers as intel_markers
+from .intel import screens as intel
 
 log = logging.getLogger(__name__)
 
@@ -267,6 +269,12 @@ class Connection:
             case "article":
                 # Not p[...]: URLs are case-sensitive and must reach the provider untouched.
                 return await asyncio.to_thread(article.read, str(params.get("url", "")).strip())
+            case "markers":
+                return await asyncio.to_thread(intel_markers.markers, p.get("security", ""), p.get("range", "1Y").upper())
+            case "world":
+                return await asyncio.to_thread(intel.world_screen, p.get("kind", "ALL").upper(), int(p.get("severity") or 1))
+            case "link":
+                return await asyncio.to_thread(intel.link_screen, p.get("query") or p.get("security", ""))
             case "crypto":
                 if p.get("security"):
                     sec = securities.resolve(p["security"])

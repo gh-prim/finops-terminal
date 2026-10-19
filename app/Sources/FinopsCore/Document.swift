@@ -74,6 +74,7 @@ public struct GatewayDocument: Decodable, Sendable {
         case series(SeriesBlock)
         case donut(DonutBlock)
         case sparkgrid(SparkGridBlock)
+        case map(MapBlock)
         case unknown
 
         public var id: String {
@@ -90,6 +91,7 @@ public struct GatewayDocument: Decodable, Sendable {
             case .series(let b): "series-\(b.id)"
             case .donut(let b): "donut-\(b.id)"
             case .sparkgrid(let b): "sparkgrid-\(b.id)"
+            case .map(let b): "map-\(b.id)"
             case .unknown: "unknown-\(UUID())"
             }
         }
@@ -111,6 +113,7 @@ public struct GatewayDocument: Decodable, Sendable {
             case "series": self = .series(try SeriesBlock(from: decoder))
             case "donut": self = .donut(try DonutBlock(from: decoder))
             case "sparkgrid": self = .sparkgrid(try SparkGridBlock(from: decoder))
+            case "map": self = .map(try MapBlock(from: decoder))
             default: self = .unknown
             }
         }
@@ -246,6 +249,25 @@ public extension GatewayDocument {
         public let title: String?
         public let center: Center
         public let groups: [Group]
+    }
+
+    /// World map with severity-sized, kind-coloured points (WORLD, LINK).
+    struct MapBlock: Decodable, Sendable {
+        public struct Point: Decodable, Sendable, Hashable, Identifiable {
+            public let lat: Double
+            public let lon: Double
+            public let label: String
+            public let detail: String?
+            public let kind: String?
+            public let severity: Int?
+            public let cmd: String?
+            public let url: String?
+            public var id: String { "\(lat),\(lon),\(label)" }
+        }
+
+        public let id: String
+        public let title: String?
+        public let points: [Point]
     }
 
     struct BarsBlock: Decodable, Sendable {

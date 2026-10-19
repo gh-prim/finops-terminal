@@ -83,6 +83,11 @@ public actor DataClient {
         try await request(service, params, as: GatewayDocument.self)
     }
 
+    /// News, earnings, macro releases and world events to mark on a chart.
+    public func markers(_ security: String, range: ChartRange) async throws -> [ChartMarker] {
+        try await request("markers", ["security": security, "range": range.rawValue], as: ChartMarkers.self).markers
+    }
+
     /// Readable text of a web article, extracted by the gateway.
     public func article(_ url: String) async throws -> Article {
         try await request("article", ["url": url], as: Article.self)

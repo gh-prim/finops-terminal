@@ -9,6 +9,7 @@ struct ChartView: View {
     let client: DataClient
     let security: String
     let config: ChartConfig
+    let run: (String) -> Void
     let onChange: (ChartConfig) -> Void
     let onError: (Error) -> Void
 
@@ -20,6 +21,7 @@ struct ChartView: View {
     /// Bars updated from the live quote stream (nil until the first tick).
     @State private var liveBars: [Bar]?
     @State private var lastTick: Date?
+    @State private var markers: [ChartMarker] = []
 
     private var comparing: Bool { !config.compare.isEmpty }
 
@@ -35,6 +37,7 @@ struct ChartView: View {
                 } else {
                     let bars = liveBars ?? main.bars
                     header(bars)
+                    if config.events { markerLine(bars) }
                     if main.range != config.range.rawValue, let interval = config.interval {
                         Text("Yahoo serves \(interval.label) bars for \(main.range) at most — range limited.")
                             .font(.terminalSmall).foregroundStyle(Palette.muted)
@@ -77,6 +80,8 @@ struct ChartView: View {
                 }
                 divider
                 toggle("VOL", on: config.volume) { $0.volume.toggle() }
+                toggle("EVT", on: config.events) { $0.events.toggle() }
+                    .help("Event markers: news, earnings, macro releases, world events on this security's exposures")
                 ForEach(ChartConfig.Overlay.allCases, id: \.self) { overlay in
                     toggle(overlay.rawValue, on: config.overlays.contains(overlay)) { c in
                         if let i = c.overlays.firstIndex(of: overlay) { c.overlays.remove(at: i) } else { c.overlays.append(overlay) }
@@ -155,6 +160,42 @@ struct ChartView: View {
     }
 
     // MARK: Header
+
+    /// Events at the hovered bar (or the latest ones), one line, coloured by kind.
+    @ViewBuilder
+    private func markerLine(_ bars: [Bar]) -> some View {
+        let shown = hovered.map { Self.markersAt($0, markers: markers, bars: bars) } ?? []
+        if !shown.isEmpty {
+            HStack(spacing: 14) {
+                ForEach(shown.prefix(3)) { m in
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrowtriangle.up.fill").font(.system(size: 8)).foregroundStyle(Self.markerColor(m.kind))
+                        Text(m.title).lineLimit(1).foregroundStyle(Palette.text)
+                        if let detail = m.detail { Text(detail).lineLimit(1).foregroundStyle(Palette.muted) }
+                    }
+                }
+                if shown.count > 3 { Text("+\(shown.count - 3)").foregroundStyle(Palette.muted) }
+                Spacer()
+                Text("click to open").foregroundStyle(Palette.muted)
+            }
+            .font(.terminalSmall)
+        } else if !markers.isEmpty {
+            HStack(spacing: 12) {
+                ForEach(["news", "earnings", "macro", "world"], id: \.self) { kind in
+                    let n = markers.filter { $0.kind == kind && Self.index(of: $0.t, in: bars) != nil }.count
+                    if n > 0 {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrowtriangle.up.fill").font(.system(size: 8)).foregroundStyle(Self.markerColor(kind))
+                            Text("\(n) \(kind)").foregroundStyle(Palette.muted)
+                        }
+                    }
+                }
+                Spacer()
+                Text("hover a ▲ to see what happened").foregroundStyle(Palette.muted)
+            }
+            .font(.terminalSmall)
+        }
+    }
 
     private func header(_ bars: [Bar]) -> some View {
         let index = hovered.map { min(max($0, 0), bars.count - 1) } ?? bars.count - 1
@@ -297,6 +338,18 @@ struct ChartView: View {
                     LineMark(x: .value("x", Double(i)), y: .value(series.name, v), series: .value("Series", series.name))
                         .foregroundStyle(series.color)
                         .lineStyle(StrokeStyle(lineWidth: 1.2, dash: series.dashed ? [3, 3] : []))
+                }
+            }
+
+            if config.events {
+                ForEach(Self.markerSlots(markers, bars: bars), id: \.index) { slot in
+                    RuleMark(x: .value("x", Double(slot.index)))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [1, 3]))
+                        .foregroundStyle(Self.markerColor(slot.kind).opacity(0.35))
+                    PointMark(x: .value("x", Double(slot.index)), y: .value("Event", high + pad * 0.55))
+                        .symbol(.triangle)
+                        .symbolSize(slot.count > 1 ? 55 : 35)
+                        .foregroundStyle(Self.markerColor(slot.kind))
                 }
             }
 
@@ -475,6 +528,15 @@ struct ChartView: View {
     private func hoverOverlay(_ proxy: ChartProxy, count: Int) -> some View {
         GeometryReader { geometry in
             Rectangle().fill(.clear).contentShape(Rectangle())
+                .onTapGesture { location in
+                    // Click a bar with event markers: open the first one (article in the reader, or its command).
+                    guard config.events, let plot = proxy.plotFrame,
+                          let v: Double = proxy.value(atX: location.x - geometry[plot].origin.x) else { return }
+                    let index = min(max(Int(v.rounded()), 0), count - 1)
+                    let bars = liveBars ?? main?.bars ?? []
+                    guard let marker = Self.markersAt(index, markers: markers, bars: bars).first else { return }
+                    if let url = marker.url { run("READ \(url)") } else if let cmd = marker.cmd { run(cmd) }
+                }
                 .onContinuousHover { phase in
                     switch phase {
                     case .active(let location):
@@ -535,6 +597,10 @@ struct ChartView: View {
             catch { onError(error) }
         }
         compares = loaded
+        if config.events, !comparing {
+            let range = ChartRange(rawValue: main?.range ?? "") ?? config.range
+            Task { markers = (try? await client.markers(security, range: range)) ?? [] }
+        }
         if !comparing { await streamLastBar() }
     }
 
@@ -558,6 +624,51 @@ struct ChartView: View {
             liveBars = bars
             lastTick = .now
         }
+    }
+}
+
+extension ChartView {
+    struct MarkerSlot { let index: Int; let kind: String; let count: Int }
+
+    static func markerColor(_ kind: String) -> Color {
+        switch kind {
+        case "earnings": Palette.accent
+        case "macro": Color(red: 0.75, green: 0.45, blue: 1.0)
+        case "world": Color(red: 0.94, green: 0.33, blue: 0.31)
+        default: Color(red: 0.35, green: 0.65, blue: 1.0)   // news
+        }
+    }
+
+    /// Bar index a time falls in (the last bar starting at or before it), nil if before the chart.
+    static func index(of t: Double, in bars: [Bar]) -> Int? {
+        guard let first = bars.first, t >= first.t else { return nil }
+        var lo = 0, hi = bars.count - 1
+        while lo < hi {
+            let mid = (lo + hi + 1) / 2
+            if bars[mid].t <= t { lo = mid } else { hi = mid - 1 }
+        }
+        return lo
+    }
+
+    static func markersAt(_ index: Int, markers: [ChartMarker], bars: [Bar]) -> [ChartMarker] {
+        markers.filter { Self.index(of: $0.t, in: bars) == index }
+            .sorted { rank($0.kind) < rank($1.kind) }
+    }
+
+    /// One triangle per bar; the most important kind sets its colour.
+    static func markerSlots(_ markers: [ChartMarker], bars: [Bar]) -> [MarkerSlot] {
+        var slots: [Int: (kind: String, count: Int)] = [:]
+        for m in markers {
+            guard let i = index(of: m.t, in: bars) else { continue }
+            let current = slots[i]
+            let kind = current.map { rank($0.kind) <= rank(m.kind) ? $0.kind : m.kind } ?? m.kind
+            slots[i] = (kind, (current?.count ?? 0) + 1)
+        }
+        return slots.map { MarkerSlot(index: $0.key, kind: $0.value.kind, count: $0.value.count) }.sorted { $0.index < $1.index }
+    }
+
+    private static func rank(_ kind: String) -> Int {
+        ["world": 0, "earnings": 1, "macro": 2, "news": 3][kind] ?? 4
     }
 }
 

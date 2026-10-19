@@ -130,7 +130,7 @@ struct PanelView: View {
         case .quote:
             QuoteView(client: client, security: security, onError: model.report)
         case .chart:
-            ChartView(client: client, security: security, config: state.chart,
+            ChartView(client: client, security: security, config: state.chart, run: run,
                       onChange: { model.setArgs($0.args, in: panel) }, onError: model.report)
         case .desc:
             DocumentView(client: client, service: "profile", params: ["security": security], run: run)
@@ -212,6 +212,12 @@ struct PanelView: View {
             QuantView()
         case .tv:
             TVView(args: args, run: run)
+        case .world:
+            DocumentView(client: client, service: "world", params: ["kind": args.first ?? "ALL"], run: run)
+        case .link where args.isEmpty && !security.isEmpty:
+            DocumentView(client: client, service: "link", params: ["query": security], run: run)
+        case .link:
+            DocumentView(client: client, service: "link", params: ["query": args.isEmpty ? "HORMUZ" : args.joined(separator: " ")], run: run)
         case .dash:
             DashboardBuilderView(model: model, client: model.client)
         case .read:

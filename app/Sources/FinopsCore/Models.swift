@@ -91,3 +91,20 @@ public struct Article: Codable, Sendable, Hashable {
     /// False for teasers, paywalls and pages that aren't articles: show the web page instead.
     public let readable: Bool
 }
+
+/// Something that happened, drawn on a chart at its time (news, earnings, macro release, world event).
+public struct ChartMarker: Codable, Sendable, Hashable, Identifiable {
+    public let t: Double
+    public let kind: String
+    public let title: String
+    public let detail: String?
+    public let url: String?
+    public let cmd: String?
+    public var id: String { "\(t)|\(kind)|\(title)" }
+    public var date: Date { Date(timeIntervalSince1970: t) }
+}
+
+public struct ChartMarkers: Codable, Sendable {
+    public let security: String
+    public let markers: [ChartMarker]
+}

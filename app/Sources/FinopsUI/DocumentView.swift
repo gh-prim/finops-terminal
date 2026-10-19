@@ -68,6 +68,7 @@ struct DocumentView: View {
                 case .series(let b): SeriesBlockView(block: b)
                 case .donut(let b): DonutBlockView(block: b)
                 case .sparkgrid(let b): SparkGridBlockView(block: b, run: run)
+                case .map(let b): MapBlockView(block: b, run: run)
                 case .unknown: EmptyView()
                 }
             }

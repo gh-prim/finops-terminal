@@ -10,6 +10,12 @@ public enum DashSource {
 
     /// Commands a screen widget can show, with a label for the builder's preset menu.
     public static let presets: [(label: String, command: String)] = [
+        ("World monitor (map)", "WORLD"),
+        ("World · conflicts", "WORLD CONFLICT"),
+        ("World · shipping chokepoints", "WORLD SHIPPING"),
+        ("World · prediction markets", "WORLD ODDS"),
+        ("Strait of Hormuz", "LINK HORMUZ"),
+        ("Taiwan", "LINK TAIWAN"),
         ("Crypto market", "CRYPTO"),
         ("Market heatmap", "HEAT 1D"),
         ("World markets", "MKT"),
@@ -49,6 +55,9 @@ public enum DashSource {
             return Request(service: "heatmap", params: ["period": first(periods, "1D"),
                                                         "sector": args.first { !periods.contains($0) } ?? ""])
         case .mkt: return Request(service: "market", params: [:])
+        case .world: return Request(service: "world", params: ["kind": args.first ?? "ALL"])
+        case .link where args.isEmpty && !sec.isEmpty: return Request(service: "link", params: ["query": sec])
+        case .link: return Request(service: "link", params: ["query": args.joined(separator: " ")])
         case .movers: return Request(service: "movers", params: ["kind": args.first ?? "GAINERS"])
         case .fxm: return Request(service: "fxmatrix", params: [:])
         case .cbr: return Request(service: "centralbanks", params: [:])

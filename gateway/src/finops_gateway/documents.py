@@ -159,3 +159,10 @@ def sparkgrid(id: str, title: str | None, items: list[dict[str, Any]]) -> dict[s
     return {"type": "sparkgrid", "id": id, "title": title,
             "items": [{**i, "change": cell(i.get("change")), "points": [cell(v) for v in i["points"] if cell(v) is not None]}
                       for i in items if i.get("points")]}
+
+
+def map_block(id: str, title: str | None, points: list[dict[str, Any]]) -> dict[str, Any]:
+    """World map: points [{"lat", "lon", "label", "detail"?, "kind", "severity" 1-3, "cmd"?, "url"?}]."""
+    return {"type": "map", "id": id, "title": title,
+            "points": [{**p, "lat": cell(p["lat"]), "lon": cell(p["lon"])} for p in points
+                       if cell(p.get("lat")) is not None and cell(p.get("lon")) is not None]}

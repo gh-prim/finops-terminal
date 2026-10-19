@@ -41,6 +41,7 @@ INDEX_ALIASES = {
     "SX5E": "^STOXX50E",
     "NKY": "^N225",
     "HSI": "^HSI",
+    "DXY": "DX-Y.NYB",
 }
 
 

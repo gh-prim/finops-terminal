@@ -31,6 +31,9 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
     case etf = "ETF"
     case crypto = "CRYPTO"
     case tv = "TV"
+    // Intelligence
+    case world = "WORLD"
+    case link = "LINK"
     // Tools
     case port = "PORT"
     case alert = "ALERT"
@@ -45,6 +48,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
     public enum Group: String, CaseIterable, Sendable {
         case security = "Security"
         case market = "Markets"
+        case intel = "Intelligence"
         case tools = "Tools"
     }
 
@@ -52,6 +56,7 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         switch self {
         case .quote, .chart, .desc, .news, .fin, .est, .evt, .hold, .file, .opt, .rv, .rels, .dcf, .sent: .security
         case .mkt, .movers, .scrn, .econ, .curve, .heat, .fxm, .wbi, .cbr, .ecal, .etf, .crypto, .tv: .market
+        case .world, .link: .intel
         case .port, .alert, .perf, .charts, .corr, .quant, .read, .dash, .help: .tools
         }
     }
@@ -87,6 +92,8 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .etf: ["ETF"]
         case .crypto: ["CRYPTO", "CRYP", "XBT"]
         case .tv: ["TV", "BTV"]
+        case .world: ["WORLD", "WRLD", "GEO"]
+        case .link: ["LINK", "LINKS"]
         case .perf: ["PERF"]
         case .charts: ["CHARTS"]
         case .corr: ["CORR"]
@@ -128,6 +135,8 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .etf: "ETFs"
         case .crypto: "Crypto"
         case .tv: "Live TV"
+        case .world: "World monitor"
+        case .link: "World links"
         case .perf: "Performance"
         case .charts: "Chart grid"
         case .corr: "Correlation"
@@ -168,6 +177,8 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .ecal: "Economic releases (actual/expected/previous) and earnings. Args: ECO|EARN, TODAY|WEEK|2WEEKS, region"
         case .etf: "ETF market (TOP, PERFORMERS), or <etf> ETF for holdings, sectors, costs"
         case .crypto: "Live crypto market from Binance (USDT USDC EUR BTC), or <coin> CRYPTO for order book and trades"
+        case .world: "Conflicts, unrest, sanctions, disasters, shipping chokepoints, internet outages, prediction markets — on a map, linked to exposed assets. Args: CONFLICT UNREST COERCION DISASTER SHIPPING INTERNET ODDS"
+        case .link: "What an entity or security is connected to: LINK HORMUZ, LINK TAIWAN, LINK OIL, or <security> LINK"
         case .tv: "Live business TV (Bloomberg on YouTube). Args: BLOOMBERG, BLOOMBERG-LIVE or a YouTube video ID"
         case .perf: "Watchlist performance heat table (1D … 1Y, volatility)"
         case .charts: "Small-multiple charts of the watchlist. Args: 5D 1M 3M 1Y"
@@ -212,6 +223,8 @@ public enum FunctionID: String, CaseIterable, Sendable, Hashable, Codable {
         case .etf: "chart.pie"
         case .crypto: "bitcoinsign.circle"
         case .tv: "play.tv"
+        case .world: "globe.americas"
+        case .link: "point.3.filled.connected.trianglepath.dotted"
         case .perf: "tablecells.badge.ellipsis"
         case .charts: "square.grid.2x2"
         case .corr: "circle.hexagongrid"
@@ -268,7 +281,7 @@ public enum CommandParser {
                 }
             }
             // Video IDs and links are case-sensitive.
-            let args = [.tv, .read, .dash].contains(function) ? Array(original[argsStart...]) : Array(tokens[argsStart...])
+            let args = [.tv, .read, .dash, .link].contains(function) ? Array(original[argsStart...]) : Array(tokens[argsStart...])
             return .run(security: security.isEmpty ? nil : security, function: function, args: args)
         }
         return .run(security: tokens.joined(separator: " "), function: nil, args: [])
