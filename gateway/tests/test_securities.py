@@ -32,3 +32,10 @@ def test_resolve(typed: str, symbol: str) -> None:
 def test_resolve_rejects(typed: str) -> None:
     with pytest.raises(ValueError):
         resolve(typed)
+
+
+def test_ticker_with_venue_and_no_class_keeps_the_listing():
+    from finops_gateway import securities
+    assert securities.resolve("WPEA FP").symbol == "WPEA.PA"
+    assert securities.resolve("SAP GY").symbol == "SAP.DE"
+    assert securities.resolve("AAPL").symbol == "AAPL"

@@ -60,3 +60,8 @@ struct TVCommandTests {
         #expect(CommandParser.parse("eth eur crypto q") == .run(security: "ETH EUR CRYPTO", function: .quote, args: []))
     }
 }
+
+@Test func etfListCommandsKeepTheirList() {
+    #expect(CommandParser.parse("ETF PEA") == .run(security: nil, function: .etf, args: ["PEA"]))
+    #expect(CommandParser.parse("ETF EUROPE") == .run(security: nil, function: .etf, args: ["EUROPE"]))
+}

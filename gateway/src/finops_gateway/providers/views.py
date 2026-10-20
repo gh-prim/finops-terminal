@@ -17,7 +17,7 @@ from .. import securities
 from ..cache import ttl_cache
 from ..documents import (bars, cell, choices, column, document, donut, graph, kv, matrix, row, scatter, series,
                          sparkgrid, table, text, treemap)
-from . import edgar, fred
+from . import edgar, fred, yahoo
 from .http import get_json
 from .yahoo import _retry_locked
 from .yahoo_research import SOURCE, news
@@ -586,7 +586,22 @@ SECTOR_NAMES = {
     "consumer_defensive": "Consumer defensive", "energy": "Energy", "basic_materials": "Materials",
     "realestate": "Real estate", "utilities": "Utilities",
 }
-ETF_LISTS = {"TOP": ("top_etfs_us", "Popular US ETFs"), "PERFORMERS": ("top_performing_etfs", "Top performing ETFs")}
+ETF_LISTS = {"TOP": ("top_etfs_us", "Popular US ETFs"), "PERFORMERS": ("top_performing_etfs", "Top performing ETFs"),
+             "PEA": (None, "PEA-eligible ETFs (Paris, EUR)"), "EUROPE": (None, "European UCITS ETFs")}
+# Curated lists (Yahoo has no screener for European ETFs). PEA: eligible for the French PEA wrapper.
+ETF_CURATED = {
+    "PEA": ["WPEA.PA", "CW8.PA", "EWLD.PA", "DCAM.PA", "PE500.PA", "PSP5.PA", "ESE.PA", "PUST.PA", "PANX.PA",
+            "PAEEM.PA", "PCEU.PA", "ETZ.PA", "C40.PA", "CAC.PA", "MSE.PA", "RS2K.PA", "PTPXE.PA"],
+    "EUROPE": ["IWDA.AS", "EUNL.DE", "VWCE.DE", "SXR8.DE", "CSPX.L", "EQQQ.PA", "EMIM.AS", "WLD.PA", "MWRD.PA"],
+}
+SUFFIX_VENUE = {suffix: venue for venue, suffix in securities.VENUE_SUFFIX.items() if suffix}
+
+
+def _typed_etf(symbol: str) -> str:
+    """WPEA.PA -> WPEA FP ETF (the terminal's own notation)."""
+    root, dot, suffix = symbol.rpartition(".")
+    venue = SUFFIX_VENUE.get(f".{suffix}") if dot else None
+    return f"{root} {venue} ETF" if venue else f"{symbol} ETF"
 
 
 @ttl_cache(3600, maxsize=64)
@@ -659,19 +674,23 @@ def _pct_or_none(value: Any) -> float | None:
 def etf_market(kind: str) -> dict[str, Any]:
     kind = kind if kind in ETF_LISTS else "TOP"
     screener, title = ETF_LISTS[kind]
-    quotes = yf.screen(screener, count=100).get("quotes", [])
-    if kind == "TOP":
+    curated = kind in ETF_CURATED
+    quotes = yahoo.raw_quotes(ETF_CURATED[kind]) if curated else yf.screen(screener, count=100).get("quotes", [])
+    if kind in ("TOP", "PEA", "EUROPE"):
         quotes.sort(key=lambda q: -(q.get("netAssets") or 0))
     rows = [row([q.get("symbol"), q.get("longName") or q.get("shortName"), q.get("regularMarketPrice"),
                  q.get("regularMarketChangePercent"), q.get("ytdReturn"), q.get("fiftyTwoWeekChangePercent"),
-                 q.get("netAssets"), q.get("netExpenseRatio")], cmd=f"{q.get('symbol')} ETF") for q in quotes if q.get("symbol")]
+                 q.get("netAssets"), q.get("netExpenseRatio")], cmd=_typed_etf(q["symbol"]) if curated else f"{q['symbol']} ETF")
+            for q in quotes if q.get("symbol")]
     return document("ETF market", [
         choices("list", None, [(t, f"ETF {k}") for k, (_, t) in ETF_LISTS.items()], title),
         table("etfs", title, [column("sym", "Symbol"), column("name", "Name"), column("price", "Price", "price"),
                               column("chg", "1D", "pctchange"), column("ytd", "YTD", "pctchange"),
                               column("y1", "52W", "pctchange"), column("aum", "Net assets", "compact"),
                               column("fee", "Expense", "percent")], rows),
-    ], SOURCE, notes=["Click an ETF for holdings, sectors and costs."])
+    ], SOURCE, notes=["Click an ETF for holdings, sectors and costs."]
+       + (["Prices in the listing currency (EUR on Paris/Amsterdam/Xetra). PEA eligibility as published by the issuers."]
+          if curated else []))
 
 
 # MARK: ECAL — economic and earnings calendar

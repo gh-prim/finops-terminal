@@ -94,6 +94,10 @@ def resolve(typed: str) -> Security:
 
     asset_class = tokens[-1] if len(tokens) > 1 and tokens[-1] in ASSET_CLASSES else None
     if asset_class is None:
+        # "WPEA FP" (ticker + venue, no class) still means the Paris listing: WPEA.PA.
+        if len(tokens) == 2 and tokens[1] in VENUE_SUFFIX:
+            return Security(typed=" ".join(tokens), symbol=tokens[0].replace("/", "-") + VENUE_SUFFIX[tokens[1]],
+                            asset_class=None)
         return Security(typed=typed.upper(), symbol=tokens[0], asset_class=None)
 
     body = tokens[:-1]

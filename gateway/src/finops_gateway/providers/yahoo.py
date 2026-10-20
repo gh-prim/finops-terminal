@@ -193,6 +193,20 @@ def quotes(symbols: list[str]) -> dict[str, dict[str, Any]]:
     return out
 
 
+@_retry_locked
+def raw_quotes(symbols: list[str]) -> list[dict[str, Any]]:
+    """Yahoo's full batch quote records (names, fund fields), one request per 50 symbols, in input order."""
+    from yfinance.data import YfData
+
+    by_symbol: dict[str, dict[str, Any]] = {}
+    unique = list(dict.fromkeys(symbols))
+    for i in range(0, len(unique), 50):
+        data = YfData().get_raw_json(QUOTE_URL, params={"symbols": ",".join(unique[i:i + 50])})
+        for q in (data.get("quoteResponse") or {}).get("result") or []:
+            by_symbol[q["symbol"]] = q
+    return [by_symbol[s] for s in unique if s in by_symbol]
+
+
 @ttl_cache(10, maxsize=512)
 def quote(symbol: str) -> dict[str, Any]:
     q = quotes([symbol]).get(symbol)
